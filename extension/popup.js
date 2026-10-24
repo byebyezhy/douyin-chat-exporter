@@ -195,3 +195,21 @@ document.querySelector("#monitor").addEventListener("click", async () => {
     control.disabled = false;
   }
 });
+
+document.querySelector("#capture").addEventListener("click", async () => {
+  const control = document.querySelector("#capture");
+  control.disabled = true;
+  status.textContent = "正在启动本地原始内容采集……";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !/^https:\/\/([a-z0-9-]+\.)*douyin\.com(?:\/|$)/i.test(tab.url || "")) {
+      throw new Error("请先打开抖音网页版的一个私信会话。");
+    }
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["local-capture.js"] });
+    status.textContent = "请返回抖音网页，查看右上角面板，缓慢翻看聊天后停止并下载。";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "启动失败";
+  } finally {
+    control.disabled = false;
+  }
+});

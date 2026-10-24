@@ -1,9 +1,9 @@
 {
   "name": "douyin-chat-exporter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
-  "description": "Privacy-first Douyin chat export browser extension (M0 diagnostic scaffold)",
+  "description": "Privacy-first Douyin chat export browser extension (M1 raw capture preview)",
   "scripts": {
     "test": "node --test",
     "build": "node scripts/build.mjs",

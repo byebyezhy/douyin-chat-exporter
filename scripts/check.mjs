@@ -14,4 +14,5 @@ for (const name of manifest.permissions || []) {
 if ((manifest.host_permissions || []).length) throw new Error("M0 does not require persistent host permissions");
 execFileSync(process.execPath, ["--check", join(root, "extension", "popup.js")], { stdio: "inherit" });
 execFileSync(process.execPath, ["--check", join(root, "extension", "index-monitor.js")], { stdio: "inherit" });
+execFileSync(process.execPath, ["--check", join(root, "extension", "local-capture.js")], { stdio: "inherit" });
 console.log("Manifest permission check passed");
