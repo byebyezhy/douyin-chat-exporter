@@ -77,6 +77,30 @@ test("离线 HTML 阅读版对私聊文字严格转义，不含远程资源", ()
   assert.doesNotMatch(html, /<script\b|https?:\/\//i);
 });
 
+test("阅读版按北京时间跨日分隔并为正文和语音标注真实分钟，旧版缺失时间不猜测", () => {
+  const archive = core.buildArchive({
+    entries: [
+      row(3, { sender: "peer", visibleText: "昨天最后一条", createdAt: "2026-10-23T15:59:00.000Z" }),
+      row(2, { sender: "self", visibleText: "今天第一条", createdAt: "2026-10-23T16:01:00.000Z" }),
+      row(1, { sender: "peer", type: "voice", visibleText: '8"',
+        voiceTranscript: { status: "success", text: "收到" }, createdAt: "2026-10-23T16:12:00.000Z" }),
+      row(0, { sender: "self", visibleText: "没有可靠时间", createdAt: null })
+    ],
+    runtime: {}, conversationTag: "日期测试", createdAt: "start", stoppedAt: "stop"
+  });
+  const txt = core.renderReadableTxt(archive);
+  assert.match(txt, /──── 2026年10月23日 ────[\s\S]*\[23:59\] 对方：昨天最后一条/);
+  assert.match(txt, /──── 2026年10月24日 ────[\s\S]*\[00:01\] 我：今天第一条/);
+  assert.match(txt, /\[00:12\] 对方：🎤 收到/);
+  assert.match(txt, /我：没有可靠时间/);
+  assert.equal((txt.match(/2026年10月24日/g) || []).length, 1);
+  assert.doesNotMatch(txt, /时间未知|\[索引/);
+  const html = core.renderReadableHtml(archive);
+  assert.match(html, /2026年10月24日/);
+  assert.match(html, /class="timestamp">00:12<\/div>/);
+  assert.match(html, /较早 → 较近 · 北京时间/);
+});
+
 test("时间解析不猜测没有时区的日期", () => {
   assert.equal(core.parseTime("2026-10-24 12:30"), null);
   assert.equal(core.parseTime("1792824000000"), "2026-10-24T06:40:00.000Z");

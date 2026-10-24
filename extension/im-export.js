@@ -47,7 +47,7 @@
       #state{color:#334155}small{display:block;color:#64748b;margin-top:8px}
     </style>
     <section>
-      <h2>抖音聊天 · v0.4.0 API 引擎候选版</h2>
+      <h2>抖音聊天 · v0.4.1 API 导出</h2>
       <p id="state">准备连接当前抖音聊天……</p>
       <p><b>步骤一：</b>若提示会话标识待捕获，请点击另一位联系人，再点回目标聊天；不要在开始导出后切换。</p>
       <label>会话标签（本机存储）<input type="text" id="tag" maxlength="80" placeholder="为目标聊天自定义一个标签"></label>
