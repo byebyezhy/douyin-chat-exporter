@@ -1,0 +1,15 @@
+dist/
+node_modules/
+*.zip
+*.har
+*.sqlite
+*.db
+*.cookie
+*.cookies
+*.session
+*.log
+private-data/
+test-private/
+fixtures/private/
+exports/
+.DS_Store

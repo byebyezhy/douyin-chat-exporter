@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "抖音聊天导出助手（开发预览）",
+  "description": "M0 页面兼容性检测；当前版本尚不导出任何聊天记录。",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "抖音聊天导出助手",
+    "default_popup": "popup.html"
+  }
+}
