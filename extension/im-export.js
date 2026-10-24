@@ -5,7 +5,8 @@
   "use strict";
   const core = globalThis.__DOUYIN_EXPORT_CORE_V020__;
   const im = globalThis.__DOUYIN_IM_CORE_V040__;
-  if (!core || !im) return alert("API 导出脚本未加载完整。");
+  const chatScroll = globalThis.__DOUYIN_CHAT_SCROLL_V042__;
+  if (!core || !im || !chatScroll) return alert("API 导出脚本未加载完整。");
   const ROOT = "douyin-im-export-v040-root";
   if (document.getElementById(ROOT)) return;
   if (document.getElementById("douyin-full-export-v020-root")) {
@@ -22,6 +23,8 @@
   let cached = null;
   let archive = null;
   let running = false;
+  let scrolling = false;
+  let scrollAbort = null;
   let storageError = false;
   const messages = new Map();
   const run = {
@@ -47,9 +50,11 @@
       #state{color:#334155}small{display:block;color:#64748b;margin-top:8px}
     </style>
     <section>
-      <h2>抖音聊天 · v0.4.1 API 导出</h2>
+      <h2>抖音聊天 · v0.4.2 API 导出</h2>
       <p id="state">准备连接当前抖音聊天……</p>
-      <p><b>步骤一：</b>若提示会话标识待捕获，请点击另一位联系人，再点回目标聊天；不要在开始导出后切换。</p>
+      <p><b>步骤一：</b>长聊天如未捕获会话标识，可先自动翻到最早消息；滚动仅用于触发抖音自身加载，不读取或导出正文。完成后再开始 API 导出。</p>
+      <button id="scrollHistory" class="subtle">自动滚动到最早消息</button>
+      <button id="stopScroll" class="subtle" hidden>停止滚动</button>
       <label>会话标签（本机存储）<input type="text" id="tag" maxlength="80" placeholder="为目标聊天自定义一个标签"></label>
       <label><input id="voice" type="checkbox" checked> 自动调用抖音原生语音识别接口</label>
       <button id="start">开始 API 历史导出</button>
@@ -63,7 +68,7 @@
       <button id="clear" class="subtle">删除本机 API 断点</button>
       <button id="close" class="subtle">关闭面板</button>
       <p id="progress">正在读取当前会话状态……</p>
-      <small>API 引擎仍需 Edge 登录态实测。仅处理当前选中的会话；不导出 Cookie/Token，不发送到开发者服务器。语音识别会调用抖音自有服务器；私人 JSON 请勿上传公开 GitHub。</small>
+      <small>自动滚动可手工停止；网页滚到底不代表服务端已完整返回历史。仅处理当前选中的会话；不导出 Cookie/Token，不发送到开发者服务器。语音识别调用抖音自有服务器；私人 JSON 请勿上传公开 GitHub。</small>
     </section>`;
   document.body.appendChild(panel);
   const $ = id => shadow.getElementById(id);
@@ -74,7 +79,7 @@
     if (event.source !== window || event.origin !== location.origin || data?.marker !== MSG || data.session !== session) return;
     if (data.direction === "event") {
       state = data.payload || {};
-      if (run.phase === "idle") show(state.shortIdReady
+      if (run.phase === "idle" && !scrolling) show(state.shortIdReady
         ? "已捕获当前会话 IM 标识，可以开始。"
         : "等待当前会话发出 IM 请求。请先切换其他聊天，再切回要导出的对象。");
     }
@@ -117,11 +122,16 @@
   function controls() {
     const active = run.phase === "running";
     const paused = run.phase === "paused";
-    $("start").disabled = active || paused;
+    $("start").disabled = active || paused || scrolling;
+    $("resume").disabled = active || paused || scrolling;
     $("pause").disabled = !active;
     $("continue").disabled = !paused;
     $("stop").disabled = !active && !paused;
-    $("tag").disabled = active || paused;
+    $("tag").disabled = active || paused || scrolling;
+    $("scrollHistory").disabled = scrolling || run.phase !== "idle";
+    $("stopScroll").hidden = !scrolling;
+    $("clear").disabled = scrolling;
+    $("close").disabled = scrolling;
   }
   function checkpoint() {
     return {
@@ -178,7 +188,14 @@
       const sb = BigInt(b.serverSequence || "0");
       return sa < sb ? -1 : sa > sb ? 1 : String(a.platformMessageId).localeCompare(String(b.platformMessageId));
     });
-    const entries = chronological.map((item, index) => ({ ...item, dataIndex: chronological.length - index - 1 }));
+    const entries = chronological.map((item, index) => {
+      // Repair v0.4.0/v0.4.1 local checkpoints as well as newly parsed rows.
+      // Their `createdAt` was incorrectly derived from the order key f4.
+      const serverTime = im.timestampFromServerId(item.platformMessageId);
+      return { ...item, dataIndex: chronological.length - index - 1,
+        ...((serverTime && item.recordKind === "im-server-message")
+          ? { createdAt: serverTime, timeEvidence: "server-id-high32-unix-seconds" } : {}) };
+    });
     const content = core.buildArchive({
       entries, conversationTag: run.tag, createdAt: run.startedAt,
       stoppedAt: new Date().toISOString(),
@@ -275,7 +292,7 @@
   }
 
   async function start(resume = false) {
-    if (run.phase === "running" || run.phase === "paused") return;
+    if (run.phase === "running" || run.phase === "paused" || scrolling) return;
     const tag = $("tag").value.trim();
     if (!tag) return show("先填写一个本地会话标签。");
     try { state = await rpc("STATUS"); } catch { return show("无法连接抖音 IM 页内引擎，请刷新网页重新启动。"); }
@@ -321,6 +338,50 @@
   }
   $("start").addEventListener("click", () => void start());
   $("resume").addEventListener("click", () => void start(true));
+  $("scrollHistory").addEventListener("click", async () => {
+    if (scrolling || run.phase === "running" || run.phase === "paused") return;
+    const surface = chatScroll.locateChat();
+    if (!surface) return show("未找到聊天虚拟列表，请先进入目标对象的私信窗口。");
+    let selected;
+    try { selected = await rpc("STATUS", {}, 10000); }
+    catch { return show("无法读取当前会话状态，请刷新抖音网页后重试。"); }
+    const convId = selected.convId;
+    const url = location.href;
+    scrollAbort = new AbortController();
+    scrolling = true;
+    controls();
+    show("正在自动滚动历史页面。你可以随时点击「停止滚动」。");
+    try {
+      const result = await chatScroll.scrollToOldest({
+        surface, signal: scrollAbort.signal, expectedHref: url,
+        verify: async () => {
+          const current = await rpc("STATUS", {}, 10000);
+          if (convId && current.convId !== convId) throw new Error("聊天对象已切换，停止自动滚动");
+        },
+        onProgress: status => {
+          show(`自动滚动中：第 ${status.step} 步（此阶段不读取消息正文）。`);
+          $("progress").textContent = `滚动位置：${Math.round(status.scrollTop)} / ${Math.round(status.scrollHeight)}\nAPI 采集尚未启动。`;
+        }
+      });
+      const current = await rpc("STATUS", {}, 10000);
+      if (result.state === "cancelled") show("已停止滚动；可以继续手工操作或重新启动自动滚动。");
+      else if (result.state === "step-limit") show("达到自动滚动安全上限；请检查页面历史是否还在加载。");
+      else show(current.shortIdReady
+        ? "已滚到历史页面末端并捕获当前会话标识。现在可以点击「开始 API 历史导出」。"
+        : "自动滚动已停止，但还未捕获会话标识。请尝试切换联系人再切回来。");
+    } catch (error) {
+      show(`自动滚动停止：${String(error?.message || "未知错误").slice(0,160)}`);
+    } finally {
+      scrolling = false;
+      scrollAbort = null;
+      controls();
+      progress();
+    }
+  });
+  $("stopScroll").addEventListener("click", () => {
+    scrollAbort?.abort();
+    show("正在停止滚动……");
+  });
   $("pause").addEventListener("click", () => {
     if (run.phase === "running") { run.phase = "paused"; controls(); show("暂停中。当前正在处理的一页会结束后停下。"); }
   });
@@ -365,6 +426,7 @@
   $("html").addEventListener("click", () => archive && download(core.renderReadableHtml(archive), "html", "text/html;charset=utf-8"));
   $("json").addEventListener("click", () => archive && download(JSON.stringify(archive, null, 2), "json", "application/json;charset=utf-8"));
   $("clear").addEventListener("click", async () => {
+    if (scrolling) return show("请先停止自动滚动。");
     if (["running", "paused"].includes(run.phase)) return show("先停止正在进行的采集。");
     if (!confirm("删除此插件在本机保存的 API 采集断点？")) return;
     await chrome.storage.local.remove(KEY);
@@ -373,14 +435,14 @@
     show("本机 API 断点已删除。");
   });
   $("close").addEventListener("click", () => {
-    if (["running", "paused"].includes(run.phase)) return show("请先停止并下载现有结果，再关闭面板。");
+    if (scrolling || ["running", "paused"].includes(run.phase)) return show("请先停止正在进行的滚动或采集，再关闭面板。");
     void rpc("CLOSE", {}, 2000).catch(() => {});
     window.removeEventListener("message", onMessage);
     panel.remove();
   });
   const poll = setInterval(async () => {
     if (!panel.isConnected) { clearInterval(poll); return; }
-    if (run.phase === "running" || run.phase === "stopping") return;
+    if (run.phase === "running" || run.phase === "stopping" || scrolling) return;
     try {
       const next = await rpc("STATUS", {}, 8000);
       state = next;

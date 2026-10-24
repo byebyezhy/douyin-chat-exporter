@@ -123,6 +123,20 @@
     if (hasMore && (!nextTs || !/^\d+$/.test(nextTs))) throw new Error("IM pagination cursor missing");
     return { messages, nextTs, hasMore };
   }
+
+  // Douyin's f4 `created_at_us` is an ordering key, not a Unix microsecond
+  // timestamp. The server snowflake message ID stores Unix SECONDS in its
+  // high 32 bits. Never substitute the order key for calendar time.
+  function timestampFromServerId(serverId) {
+    if (!/^\d{1,20}$/.test(String(serverId ?? ""))) return null;
+    try {
+      const seconds = toBig(serverId) >> 32n;
+      // Douyin predates neither 2016 nor year 2100. Out-of-range IDs are not
+      // interpreted as reliable dates (including synthetic small test IDs).
+      if (seconds < 1451606400n || seconds >= 4102444800n) return null;
+      return new Date(Number(seconds) * 1000).toISOString();
+    } catch { return null; }
+  }
   function normalizeMessage(message, dataIndex, selfUid = "") {
     let body = {};
     try { body = JSON.parse(message.contentJson || "{}"); } catch { /* keep unparsed data non-text */ }
@@ -138,18 +152,17 @@
         (typeof body.text === "string" && body.text.length > 0) ? "text" : "unknown_media";
     const visibleText = type === "text" ? body.text :
       type === "voice" ? `${Math.max(0, Math.round(Number(duration) / 1000))}\"` : "";
-    const timestamp = /^\d{1,18}$/.test(message.createdAtUs)
-      ? new Date(Number(BigInt(message.createdAtUs) / 1000n)) : null;
+    const timestamp = timestampFromServerId(message.serverId);
     return {
       dataIndex, platformMessageId: message.serverId || null,
       messageIdConfidence: message.serverId ? "verified" : "unavailable",
       recordKind: "im-server-message", visibleText, type,
       sender: selfUid ? (message.senderUid === selfUid ? "self" : "peer") : "unknown",
       senderConfidence: selfUid ? "server-id" : "unverified",
-      createdAt: timestamp && Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null,
+      createdAt: timestamp,
       serverCreatedAtUs: message.createdAtUs,
       serverSequence: message.sequence,
-      timeEvidence: "server-created_at_us", captureConfidence: "stable",
+      timeEvidence: timestamp ? "server-id-high32-unix-seconds" : "unverified", captureConfidence: "stable",
       capturedAt: new Date().toISOString(), lastUpdatedAt: new Date().toISOString(),
       ...(hasVoice ? {
         voiceDurationSeconds: Number(duration) / 1000,
@@ -212,6 +225,6 @@
   }
   globalThis.__DOUYIN_IM_CORE_V040__ = Object.freeze({
     field, fields, concat, buildHistoryRequest, inspectHistoryRequest, decodeHistoryResponse,
-    normalizeMessage, voiceRequest, matchTranscriptions
+    timestampFromServerId, normalizeMessage, voiceRequest, matchTranscriptions
   });
 })();

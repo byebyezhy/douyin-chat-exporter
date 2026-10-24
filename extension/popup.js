@@ -245,7 +245,7 @@ document.querySelector("#api-export").addEventListener("click", async () => {
       target: { tabId: tab.id }, world: "MAIN", files: ["im-core.js", "im-page-bridge.js"]
     });
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id }, world: "ISOLATED", files: ["export-core.js", "im-core.js", "im-export.js"]
+      target: { tabId: tab.id }, world: "ISOLATED", files: ["export-core.js", "im-core.js", "chat-scroll.js", "im-export.js"]
     });
     status.textContent = "API 面板已启动。请返回抖音页面；如果提示未捕获 IM 标识，先切换聊天再切回来。";
   } catch (error) {

@@ -29,17 +29,33 @@ test("独立 protobuf 编解码保留 uint64，不以虚拟索引伪造稳定 ID
   assert.deepEqual(im.inspectHistoryRequest(body), {
     convId: "0:1:101:102", shortId: "987654321098765432"
   });
-  const message = makeMessage({ id: "9007199254740998", timestamp: "1700000000000000", text: "模拟文字" });
+  const snowflake = ((1700000000n << 32n) | 42n).toString();
+  const message = makeMessage({ id: snowflake, timestamp: "1672502400010000", text: "模拟文字" });
   const parsed = im.decodeHistoryResponse(reply([message], false, "1690000000000000"));
   assert.equal(parsed.messages.length, 1);
-  assert.equal(parsed.messages[0].serverId, "9007199254740998");
-  assert.equal(parsed.messages[0].createdAtUs, "1700000000000000");
+  assert.equal(parsed.messages[0].serverId, snowflake);
+  assert.equal(parsed.messages[0].createdAtUs, "1672502400010000");
   assert.equal(parsed.hasMore, false);
   const row = im.normalizeMessage(parsed.messages[0], 0, "101");
   assert.equal(row.sender, "self");
   assert.equal(row.type, "text");
   assert.equal(row.visibleText, "模拟文字");
   assert.equal(row.createdAt, "2023-11-14T22:13:20.000Z");
+  assert.equal(row.serverCreatedAtUs, "1672502400010000");
+  assert.equal(row.timeEvidence, "server-id-high32-unix-seconds");
+});
+
+test("协议中的 created_at_us 是顺序键，不能误认为消息时间；无效 snowflake 不伪造日期", () => {
+  assert.equal(im.timestampFromServerId(((1792175566n << 32n) | 1234n).toString()),
+    "2026-10-16T18:32:46.000Z");
+  assert.equal(im.timestampFromServerId("23"), null);
+  assert.equal(im.timestampFromServerId("invalid"), null);
+  const row = im.normalizeMessage({
+    convId: "c", serverId: "23", createdAtUs: "1672502400010000",
+    contentJson: JSON.stringify({ text: "无可靠时间" })
+  }, 0);
+  assert.equal(row.createdAt, null);
+  assert.equal(row.timeEvidence, "unverified");
 });
 
 test("语音请求绑定服务端消息 ID，分批响应不能将转写串到别的消息", () => {
