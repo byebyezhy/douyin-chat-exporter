@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "抖音聊天导出助手（实验预览）",
-  "description": "M1 实验性本地聊天内容采集；未验证完整历史与语音转写。",
-  "version": "0.1.7",
+  "name": "抖音聊天导出助手（v0.2 候选版）",
+  "description": "单会话自动采集、浏览器本地断点、JSON/TXT 与抖音原生语音转写尝试；提供明确的完整性状态。",
+  "version": "0.2.0",
   "minimum_chrome_version": "116",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_title": "抖音聊天导出助手",
     "default_popup": "popup.html"

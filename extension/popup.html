@@ -10,15 +10,16 @@
   <main>
     <header>
       <h1>抖音聊天导出助手</h1>
-      <span class="badge">M1 实验预览</span>
+      <span class="badge">v0.2 候选版</span>
     </header>
-    <p>已验证连续列表索引监听。新功能可<strong>在本地试采集可见聊天文字</strong>，仍未验证完整历史与语音。</p>
-    <button type="button" id="diagnose">检测当前页面</button>
+    <p>单会话自动滚动、持续采集、本地断点、消息分类与原生语音转写尝试。<strong>不确定的消息与转写会明确标记，不能保证完整历史。</strong></p>
+    <button type="button" id="full-export">启动 v0.2.0 自动导出</button>
+    <button type="button" id="diagnose" class="secondary-action">检测当前页面（诊断）</button>
     <button type="button" id="monitor" class="secondary-action">开始连续索引测试</button>
     <button type="button" id="capture" class="secondary-action">开始本地聊天文字采集（实验）</button>
     <div id="status" role="status" aria-live="polite">请先打开抖音网页版并登录。</div>
     <pre id="result" hidden></pre>
-    <p class="hint">索引测试只记录数字。本地文字采集会读取当前会话的可见文字并在本机下载 JSON/TXT，不联网发送；请勿把含私聊的文件发到公开仓库。两种测试请分开运行。</p>
+    <p class="hint">旧版诊断功能保留，测试面板请勿同时开启。自动导出会将断点保存到浏览器扩展本地存储，并提供删除按钮；不会联网发送数据。请勿上传包含私人聊天的文件。</p>
   </main>
   <script src="popup.js"></script>
 </body>

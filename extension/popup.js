@@ -213,3 +213,21 @@ document.querySelector("#capture").addEventListener("click", async () => {
     control.disabled = false;
   }
 });
+
+document.querySelector("#full-export").addEventListener("click", async () => {
+  const control = document.querySelector("#full-export");
+  control.disabled = true;
+  status.textContent = "正在打开完整功能候选版……";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !/^https:\/\/([a-z0-9-]+\.)*douyin\.com(?:\/|$)/i.test(tab.url || "")) {
+      throw new Error("请先打开抖音网页版的一个私信会话。");
+    }
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["export-core.js", "full-export.js"] });
+    status.textContent = "已打开。请返回抖音网页，填写会话标签，然后点击开始自动采集。";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "启动失败";
+  } finally {
+    control.disabled = false;
+  }
+});

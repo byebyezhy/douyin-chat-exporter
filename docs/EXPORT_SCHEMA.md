@@ -1,5 +1,19 @@
 # 第一版导出 JSON 草案
 
+## v0.2.0 功能候选格式
+
+实际导出 `schemaVersion: "0.2.0-rc.1"`，包含：
+
+- `conversation.localTag`：用户在本机指定的会话标签，**不是平台会话 ID**。
+- `exportOrder: "oldest-first-by-observed-virtual-index"`：当前网页版验证的阅读方向。
+- `capture`：`state/reason/startedFromNewest/oldestBoundaryEvidence/verifiedPlatformMessageIds/observedCount/minIndex/maxIndex/gapCount/stableEntries/provisionalEntries` 等。
+- `voiceTranscription`：`source: "douyin-native-only"` 以及 `total/success/pending/failed/manual_required/unavailable/unknownTypeEntries`。成功只针对识别出来的语音，不保证覆盖所有隐形语音。
+- `entries[]`：`dataIndex, platformMessageId, messageIdConfidence, visibleText, type, sender, senderConfidence, createdAt, timeEvidence, mediaMarkers, captureConfidence, voiceTranscript`。缺失值为 `null` 或 `unknown`，不伪造 ID 和时间。
+
+已知限制：不提供媒体二进制备份。页面末端只被视觉识别时，`capture.state` 不得标为 `complete`。
+
+---
+
 > 字段会在 M0 真实页面验证后确定。以下是**合成示例**，不包含实际聊天或平台凭据。
 
 ```json
