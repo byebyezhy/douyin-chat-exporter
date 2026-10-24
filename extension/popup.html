@@ -16,7 +16,7 @@
     <button type="button" id="diagnose">检测当前页面</button>
     <div id="status" role="status" aria-live="polite">请先打开抖音网页版并登录。</div>
     <pre id="result" hidden></pre>
-    <p class="hint">请在聊天窗口检测一次，再向上滚动几屏后重新检测。比较两个滚动区域的 scrollTop；结果不包含聊天正文。不要分享 Cookie 或 HAR。</p>
+    <p class="hint">结果新增 chatCandidateIndex 和 chatStructure，供开发阶段定位消息节点。不会读取聊天正文或属性值；不要分享 Cookie 或 HAR。</p>
   </main>
   <script src="popup.js"></script>
 </body>
