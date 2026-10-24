@@ -80,6 +80,52 @@ function inspectPage() {
     return found.sort((a, b) => b.sameTagCount - a.sameTagCount).slice(0, 15);
   };
 
+  const indexedMessageStructure = () => {
+    const parent = chatContainer?.firstElementChild;
+    const items = parent ? [...parent.children].filter(element => element.hasAttribute("data-index")) : [];
+    const numericIndices = items.map(element => Number(element.getAttribute("data-index")))
+      .filter(Number.isFinite);
+    const shape = (element, depth = 0) => ({
+      tag: element.tagName.toLowerCase(),
+      children: element.children.length,
+      directTextNodes: [...element.childNodes].filter(node => node.nodeType === 3).length,
+      classTokens: element.classList.length,
+      dataAttributes: [...element.attributes].map(attribute => attribute.name)
+        .filter(name => name.startsWith("data-")).slice(0, 6),
+      ...(depth < 3 ? { sampleChildren: [...element.children].slice(0, 3)
+        .map(child => shape(child, depth + 1)) } : {})
+    });
+    const samples = [];
+    const seen = new Set();
+    for (const item of items) {
+      const nodes = [item, ...item.querySelectorAll("*")];
+      const tags = {};
+      for (const node of nodes) {
+        const tag = node.tagName.toLowerCase();
+        tags[tag] = (tags[tag] || 0) + 1;
+      }
+      const signature = Object.entries(tags).sort(([a], [b]) => a.localeCompare(b))
+        .map(([tag, count]) => `${tag}:${count}`).join("|");
+      if (seen.has(signature)) continue;
+      seen.add(signature);
+      samples.push({
+        dataIndex: item.getAttribute("data-index"),
+        descendants: nodes.length - 1,
+        tagCounts: tags,
+        structure: shape(item)
+      });
+      if (samples.length === 4) break;
+    }
+    return {
+      renderedItems: items.length,
+      firstIndex: items[0]?.getAttribute("data-index") ?? null,
+      lastIndex: items.at(-1)?.getAttribute("data-index") ?? null,
+      minNumericIndex: numericIndices.length ? Math.min(...numericIndices) : null,
+      maxNumericIndex: numericIndices.length ? Math.max(...numericIndices) : null,
+      sampleShapes: samples
+    };
+  };
+
   return {
     host: location.hostname,
     readyState: document.readyState,
@@ -90,7 +136,8 @@ function inspectPage() {
     chatCandidateIndex: chatIndex,
     chatStructure: {
       descendantElements: chatContainer?.querySelectorAll("*").length ?? 0,
-      repeatedGroups: structuralGroups()
+      repeatedGroups: structuralGroups(),
+      indexedMessages: indexedMessageStructure()
     },
     scrollableRegions: scrollables.slice(0, 12).map((element, index) => ({
       index,
