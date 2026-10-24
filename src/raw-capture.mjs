@@ -20,11 +20,14 @@ export function indexCoverage(indexes, sampleSize = 40) {
   return { observedCount: numeric.length, minIndex, maxIndex, unobservedIndexesInRange, missingIndexSample };
 }
 
-export function buildRawArchive({ entries, startedAt, stoppedAt, conflicts = [], failures = [], interrupted = false }) {
+export function buildRawArchive({
+  entries, startedAt, stoppedAt, transientChanges = [], confirmedConflicts = [],
+  pendingStableChanges = [], failures = [], interrupted = false
+}) {
   const ordered = [...entries].sort((a, b) => a.dataIndex - b.dataIndex);
   const coverage = indexCoverage(ordered.map(item => item.dataIndex));
   return {
-    schemaVersion: "0.1.5-raw-preview",
+    schemaVersion: "0.1.6-raw-preview",
     platform: "douyin",
     source: "user-visible-webpage-dom",
     scope: "one-open-chat-list",
@@ -38,7 +41,11 @@ export function buildRawArchive({ entries, startedAt, stoppedAt, conflicts = [],
       interrupted,
       ...coverage,
       entriesWithNoVisibleText: ordered.filter(item => !item.visibleText).length,
-      conflictingIndexes: [...conflicts].sort((a, b) => a - b),
+      stableEntries: ordered.filter(item => item.captureConfidence === "stable").length,
+      provisionalEntries: ordered.filter(item => item.captureConfidence !== "stable").length,
+      transientTextVariationIndexes: [...transientChanges].sort((a, b) => a - b),
+      confirmedConflictIndexes: [...confirmedConflicts].sort((a, b) => a - b),
+      changesWaitingForStability: [...pendingStableChanges].sort((a, b) => a - b),
       failedCaptureIndexes: [...failures].sort((a, b) => a - b)
     },
     voiceTranscription: {
@@ -56,7 +63,7 @@ export function renderRawText(archive) {
     "抖音聊天列表原始采集 · 实验预览",
     "注意：本文件不是已验证完整的消息备份。",
     `采集范围：${archive.capture.minIndex ?? "?"}–${archive.capture.maxIndex ?? "?"}；观察条目：${archive.capture.observedCount}`,
-    `未观察索引：${archive.capture.unobservedIndexesInRange}；冲突索引：${archive.capture.conflictingIndexes.length}`,
+    `未观察索引：${archive.capture.unobservedIndexesInRange}；稳定冲突索引：${archive.capture.confirmedConflictIndexes.length}`,
     "语音转写：未验证",
     ""
   ];

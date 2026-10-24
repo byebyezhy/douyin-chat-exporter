@@ -39,7 +39,7 @@
         border-radius:6px;padding:8px;max-height:230px;overflow:auto}
     </style>
     <section>
-      <strong>本地聊天文字采集 · M1 实验版</strong>
+      <strong>本地聊天文字采集 · M1.1 实验版</strong>
       <p id="state">正在监听。请只在当前会话中缓慢翻看更早的历史。</p>
       <p id="progress">等待列表内容……</p>
       <p id="warn">采集可能包含私人聊天文字，仅保存在本页内存。不要把导出的 JSON/TXT 发给别人或提交到 GitHub。</p>
@@ -54,7 +54,11 @@
 
   const byId = id => shadow.getElementById(id);
   const entries = new Map();
-  const conflictingIndexes = new Set();
+  const candidates = new Map();
+  const stableEntries = new Map();
+  const changedTextIndexes = new Set();
+  const confirmedConflictIndexes = new Set();
+  const pendingStableChangeIndexes = new Set();
   const failedIndexes = new Set();
   const startedAt = new Date().toISOString();
   const initialScrollTop = scroller.scrollTop;
@@ -62,6 +66,12 @@
   let interrupted = false;
   let lastUiRefresh = 0;
   let archive = null;
+
+  // Rendering often updates an index and its text in separate DOM mutations.
+  // Only promote content after it remains unchanged across different polls.
+  const STABILITY_MS = 180;
+
+  const differsSubstantially = (a, b) => Boolean(a && b && !a.includes(b) && !b.includes(a));
 
   const mediaMarkers = element => ({
     img: element.querySelectorAll("img").length,
@@ -72,7 +82,9 @@
   });
 
   const captureItem = element => {
-    if (!element?.hasAttribute("data-index")) return;
+    // Only the live, direct virtual-list rows are candidate chat items.
+    // Detached nodes and nested data-index attributes can carry stale values.
+    if (!element?.isConnected || element.parentElement !== list || !element.hasAttribute("data-index")) return;
     const rawIndex = element.getAttribute("data-index");
     if (!/^-?\d+$/.test(rawIndex || "")) return;
     const dataIndex = Number(rawIndex);
@@ -85,7 +97,8 @@
         ? element.innerText.replace(/\r\n/g, "\n").trim()
         : (element.textContent || "").replace(/\r\n/g, "\n").trim();
       const markers = mediaMarkers(element);
-      const now = new Date().toISOString();
+      const timestamp = Date.now();
+      const now = new Date(timestamp).toISOString();
       const next = {
         dataIndex,
         recordKind: "unclassified-virtual-list-item",
@@ -97,22 +110,34 @@
         capturedAt: now,
         lastUpdatedAt: now
       };
-      const previous = entries.get(dataIndex);
-      if (!previous) {
-        entries.set(dataIndex, next);
+      const existing = entries.get(dataIndex);
+      const priorCandidate = candidates.get(dataIndex);
+      const sameCandidate = priorCandidate && priorCandidate.visibleText === visibleText &&
+        JSON.stringify(priorCandidate.mediaMarkers) === JSON.stringify(markers);
+      if (!priorCandidate || !sameCandidate) {
+        if (differsSubstantially(priorCandidate?.visibleText, visibleText)) changedTextIndexes.add(dataIndex);
+        if (stableEntries.has(dataIndex) &&
+            differsSubstantially(stableEntries.get(dataIndex).visibleText, visibleText)) {
+          pendingStableChangeIndexes.add(dataIndex);
+        }
+        candidates.set(dataIndex, { visibleText, mediaMarkers: markers, since: timestamp });
+        if (!stableEntries.has(dataIndex)) {
+          // Provisional snapshots may be replaced by the latest DOM content;
+          // never keep an unrelated older row just because its text was longer.
+          entries.set(dataIndex, { ...next, capturedAt: existing?.capturedAt ?? now, captureConfidence: "provisional" });
+        }
         return;
       }
 
-      if (previous.visibleText && visibleText &&
-          !previous.visibleText.includes(visibleText) && !visibleText.includes(previous.visibleText)) {
-        // A recycled/reindexed row or unexpectedly changed content must be flagged.
-        conflictingIndexes.add(dataIndex);
-      }
-      const previousMarkers = Object.values(previous.mediaMarkers).reduce((a, b) => a + b, 0);
-      const newMarkers = Object.values(markers).reduce((a, b) => a + b, 0);
-      if (visibleText.length > previous.visibleText.length ||
-          (visibleText.length === previous.visibleText.length && newMarkers > previousMarkers)) {
-        entries.set(dataIndex, { ...next, capturedAt: previous.capturedAt });
+      if (timestamp - priorCandidate.since >= STABILITY_MS) {
+        const priorStable = stableEntries.get(dataIndex);
+        if (differsSubstantially(priorStable?.visibleText, visibleText)) {
+          confirmedConflictIndexes.add(dataIndex);
+        }
+        const selected = { ...next, capturedAt: existing?.capturedAt ?? now, captureConfidence: "stable" };
+        stableEntries.set(dataIndex, selected);
+        entries.set(dataIndex, selected);
+        pendingStableChangeIndexes.delete(dataIndex);
       }
     } catch {
       failedIndexes.add(dataIndex);
@@ -121,22 +146,29 @@
 
   const captureNode = node => {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
-    const containingItem = node.closest?.("[data-index]");
-    if (containingItem && list.contains(containingItem)) captureItem(containingItem);
-    if (node.hasAttribute("data-index")) captureItem(node);
-    for (const descendant of node.querySelectorAll("[data-index]")) captureItem(descendant);
+    // Use list membership, not nearest [data-index]: other nested UI elements
+    // may also carry that attribute, without representing a chat message.
+    let item = node;
+    while (item && item !== list && item.parentElement !== list) item = item.parentElement;
+    if (item?.parentElement === list) captureItem(item);
+    if (node === list) {
+      for (const child of list.children) captureItem(child);
+    }
   };
 
   const updateProgress = () => {
     const now = Date.now();
     if (now - lastUiRefresh < 150) return;
     lastUiRefresh = now;
-    const indexes = [...entries.keys()];
-    const min = indexes.length ? Math.min(...indexes) : "?";
-    const max = indexes.length ? Math.max(...indexes) : "?";
+    let min = null;
+    let max = null;
+    for (const index of entries.keys()) {
+      min = min === null ? index : Math.min(min, index);
+      max = max === null ? index : Math.max(max, index);
+    }
     const noText = [...entries.values()].filter(entry => !entry.visibleText).length;
     byId("progress").textContent =
-      `已暂存 ${entries.size} 个列表项；索引 ${min}–${max}；无可见文字 ${noText}；疑似冲突 ${conflictingIndexes.size}`;
+      `已暂存 ${entries.size} 个列表项；索引 ${min ?? "?"}–${max ?? "?"}；无可见文字 ${noText}；稳定 ${stableEntries.size}；确认冲突 ${confirmedConflictIndexes.size}`;
   };
 
   const captureVisible = () => {
@@ -174,8 +206,12 @@
 
   const coverage = indexes => {
     if (!indexes.length) return { min: null, max: null, missing: 0, sample: [] };
-    const min = Math.min(...indexes);
-    const max = Math.max(...indexes);
+    let min = indexes[0];
+    let max = indexes[0];
+    for (const index of indexes) {
+      min = Math.min(min, index);
+      max = Math.max(max, index);
+    }
     const present = new Set(indexes);
     const span = max - min + 1;
     const sample = [];
@@ -200,7 +236,7 @@
     const indexes = ordered.map(entry => entry.dataIndex);
     const span = coverage(indexes);
     archive = {
-      schemaVersion: "0.1.5-raw-preview",
+      schemaVersion: "0.1.6-raw-preview",
       platform: "douyin",
       source: "user-visible-webpage-dom",
       scope: "one-open-chat-list",
@@ -220,7 +256,11 @@
         unobservedIndexesInRange: span.missing,
         missingIndexSample: span.sample,
         entriesWithNoVisibleText: ordered.filter(entry => !entry.visibleText).length,
-        conflictingIndexes: [...conflictingIndexes].sort((a, b) => a - b),
+        stableEntries: stableEntries.size,
+        provisionalEntries: entries.size - stableEntries.size,
+        transientTextVariationIndexes: [...changedTextIndexes].sort((a, b) => a - b),
+        confirmedConflictIndexes: [...confirmedConflictIndexes].sort((a, b) => a - b),
+        changesWaitingForStability: [...pendingStableChangeIndexes].sort((a, b) => a - b),
         failedCaptureIndexes: [...failedIndexes].sort((a, b) => a - b)
       },
       voiceTranscription: {
@@ -242,7 +282,11 @@
       `索引范围：${span.min ?? "?"}–${span.max ?? "?"}`,
       `未观察索引：${span.missing}`,
       `无可见文字：${archive.capture.entriesWithNoVisibleText}`,
-      `疑似重编号冲突：${conflictingIndexes.size}`,
+      `稳定采集条目：${stableEntries.size}`,
+      `尚未稳定条目：${entries.size - stableEntries.size}`,
+      `瞬时文本变化索引：${changedTextIndexes.size}`,
+      `稳定后仍发生冲突：${confirmedConflictIndexes.size}`,
+      `变化尚未稳定：${pendingStableChangeIndexes.size}`,
       `读取异常索引：${failedIndexes.size}`,
       "历史完整性：未验证（partial）",
       "语音转换完整性：未验证"
@@ -288,6 +332,8 @@
     if (!stopped) finish();
     host.remove();
     entries.clear();
+    candidates.clear();
+    stableEntries.clear();
     archive = null;
   });
   captureVisible();

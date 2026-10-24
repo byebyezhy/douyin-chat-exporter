@@ -26,13 +26,16 @@ test("空集合和缺口准确列示", () => {
 test("导出按列表位置排序，不臆造发送者或时间", () => {
   const archive = buildRawArchive({
     entries: [
-      { dataIndex: 2, visibleText: "第二条", capturedAt: "T2", mediaMarkers: { img: 1 } },
-      { dataIndex: 1, visibleText: "第一条", capturedAt: "T1", mediaMarkers: {} }
+      { dataIndex: 2, visibleText: "第二条", capturedAt: "T2", mediaMarkers: { img: 1 }, captureConfidence: "stable" },
+      { dataIndex: 1, visibleText: "第一条", capturedAt: "T1", mediaMarkers: {}, captureConfidence: "provisional" }
     ],
-    startedAt: "start", stoppedAt: "stop", conflicts: [2]
+    startedAt: "start", stoppedAt: "stop", confirmedConflicts: [2], transientChanges: [1, 2]
   });
   assert.deepEqual(archive.entries.map(item => item.dataIndex), [1, 2]);
-  assert.deepEqual(archive.capture.conflictingIndexes, [2]);
+  assert.deepEqual(archive.capture.confirmedConflictIndexes, [2]);
+  assert.deepEqual(archive.capture.transientTextVariationIndexes, [1, 2]);
+  assert.equal(archive.capture.stableEntries, 1);
+  assert.equal(archive.capture.provisionalEntries, 1);
   const txt = renderRawText(archive);
   assert.ok(txt.indexOf("第一条") < txt.indexOf("第二条"));
   assert.match(txt, /未识别发送者\/时间/);
