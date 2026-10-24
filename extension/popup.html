@@ -14,9 +14,10 @@
     </header>
     <p>当前仅检测网页版基本结构，<strong>暂不导出消息</strong>，也不会读取聊天正文。</p>
     <button type="button" id="diagnose">检测当前页面</button>
+    <button type="button" id="monitor" class="secondary-action">开始连续索引测试</button>
     <div id="status" role="status" aria-live="polite">请先打开抖音网页版并登录。</div>
     <pre id="result" hidden></pre>
-    <p class="hint">请先检测，再向上滚动几屏后重新检测。indexedMessages 用于观察 data-index 范围及脱敏元素层级，不包含聊天正文；不要分享 Cookie 或 HAR。</p>
+    <p class="hint">连续索引测试会在网页右上角出现小面板，你可以正常滚动聊天，再点击停止并复制报告。它只记录数字，不包含聊天正文。</p>
   </main>
   <script src="popup.js"></script>
 </body>

@@ -177,3 +177,21 @@ button.addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+document.querySelector("#monitor").addEventListener("click", async () => {
+  const control = document.querySelector("#monitor");
+  control.disabled = true;
+  status.textContent = "正在启动连续监听……";
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !/^https:\/\/([a-z0-9-]+\.)*douyin\.com(?:\/|$)/i.test(tab.url || "")) {
+      throw new Error("请先打开抖音网页版聊天窗口。");
+    }
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["index-monitor.js"] });
+    status.textContent = "已启动。请返回网页，查看右上角监听面板并向上滚动聊天。";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "启动失败";
+  } finally {
+    control.disabled = false;
+  }
+});
