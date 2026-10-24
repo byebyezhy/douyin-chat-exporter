@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Check least-privilege manifest
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+      - name: Build extension
+        run: npm run build
+      - name: Package v0.4 API-first extension
+        run: |
+          cd dist/extension
+          zip -qr ../douyin-chat-exporter-extension.zip .
+      - name: Upload API-first extension
+        uses: actions/upload-artifact@v6
+        with:
+          name: douyin-chat-exporter-extension
+          path: dist/douyin-chat-exporter-extension.zip
+          retention-days: 14

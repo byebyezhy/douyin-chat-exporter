@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>抖音聊天导出助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>抖音聊天导出助手</h1>
+      <span class="badge">v0.4.2 时间修正与自动滚动</span>
+    </header>
+    <p>单会话 IM API 采集、抖音原生语音接口与 TXT/HTML 阅读版。<strong>阅读版新增消息时间；导出完整性仍需核对。</strong></p>
+    <button type="button" id="api-export">启动 v0.4.2 API 导出</button>
+    <button type="button" id="full-export" class="secondary-action">旧版网页滚动导出（已验证正文）</button>
+    <button type="button" id="diagnose" class="secondary-action">检测当前页面（诊断）</button>
+    <button type="button" id="monitor" class="secondary-action">开始连续索引测试</button>
+    <button type="button" id="capture" class="secondary-action">开始本地聊天文字采集（实验）</button>
+    <div id="status" role="status" aria-live="polite">请先打开抖音网页版并登录。</div>
+    <pre id="result" hidden></pre>
+    <p class="hint">API 面板新增「自动滚动到最早消息」按钮，用于触发较长会话的网页历史加载。无需 debugger 权限；断点只在本机，勿公开聊天记录。</p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
