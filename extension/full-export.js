@@ -51,24 +51,27 @@
       small{display:block;margin-top:9px;color:#64748b}
     </style>
     <section>
-      <h2>抖音单会话自动导出 · v0.2.0 候选版</h2>
+      <h2>抖音单会话自动导出 · v0.3.0 候选版</h2>
       <p id="state">确认当前打开的是你要导出的一个私信会话。</p>
       <label for="tag">本地会话标签（用于防止续采混淆）</label>
       <input type="text" id="tag" maxlength="80" placeholder="例如：聊天对象A（仅保存在浏览器）">
       <label><input id="voice" type="checkbox" checked> 尝试使用抖音原生「转成文字」（失败则保留待处理状态）</label>
+      <label><input id="trustedVoice" type="checkbox"> 使用已授权的增强语音右键（可在插件弹窗中授权/撤销）</label>
       <button id="start">从最近消息开始自动采集</button>
       <button id="restore" class="secondary" hidden>恢复本地断点</button>
       <button id="pause" class="secondary" disabled>暂停</button>
       <button id="continue" class="secondary" disabled>继续</button>
       <button id="stop" class="secondary" disabled>停止并准备导出</button>
       <button id="rescan" class="secondary" disabled>重扫当前屏幕</button>
-      <button id="json" hidden>下载 JSON</button>
-      <button id="txt" hidden>下载 TXT</button>
+      <button id="txt" hidden>下载简洁 TXT</button>
+      <button id="html" hidden>下载阅读版 HTML</button>
+      <button id="json" hidden>下载完整 JSON</button>
+      <button id="rawtxt" class="secondary" hidden>下载技术明细 TXT</button>
       <button id="clear" class="danger">删除本机断点</button>
       <button id="close" class="secondary">关闭面板</button>
       <p id="progress">等待开始……</p>
       <p id="warning">本工具只处理当前网页。文件和断点包含私人聊天，均留在本机。当前不能保证自动识别所有消息类型、语音或最早边界；遇到不确定情况明确报告。</p>
-      <small>请勿切换聊天对象、刷新或退出登录。若网页结构变化、验证码出现，请先暂停。插件不主动向开发者发送数据；调用抖音原生转写时由抖音处理语音。</small>
+      <small>不要切换聊天对象。增强语音会短暂附加到当前抖音标签执行可信鼠标事件，可能显示浏览器调试提示；仅在你授权且勾选后使用。插件不上传私聊，抖音原生转写由抖音处理语音。</small>
     </section>`;
   document.body.appendChild(host);
   const $ = id => shadow.getElementById(id);
@@ -143,11 +146,15 @@
       [node.getAttribute?.("aria-label"), node.getAttribute?.("title"), node.getAttribute?.("data-type")]
         .some(value => typeof value === "string" && pattern.test(value)));
     if (explicit) return explicit;
-    // Some voice bubbles display a waveform canvas and an audio duration,
-    // without accessible labels. Keep this as a heuristic, not proof.
+    // Verified local TXT sample: Douyin voice bubbles render 28", 6", 1".
+    // They also had a canvas, but generic messages often have canvas too.
     const canvas = element.querySelector("canvas");
-    const duration = /(?:\d{1,2}:\d{2}|\d+(?:\.\d+)?\s*秒|\d+\s*[″”'])/;
-    return canvas && duration.test((element.innerText || "").trim()) ? canvas : null;
+    const firstLine = (element.innerText || "").trim().split("\n")[0].trim();
+    const duration = /^\d{1,3}\s*["″”]$/;
+    if (!canvas || !duration.test(firstLine)) return null;
+    const label = [...element.querySelectorAll("span,p,button,div")].find(node =>
+      duration.test((node.innerText || "").trim()));
+    return label?.closest?.('[role="button"]') || label?.parentElement || canvas.parentElement || canvas;
   }
 
   function candidateMessageId(element, dataIndex) {
@@ -180,6 +187,8 @@
       recordKind: "virtual-list-item", visibleText: text, type,
       ...senderFromLayout(element), ...timeInRow(element),
       mediaMarkers: media,
+      voiceDurationSeconds: type === "voice"
+        ? Number(text.match(/^\s*(\d{1,3})\s*["″”]/)?.[1] ?? 0) || null : null,
       captureConfidence: "provisional", capturedAt: now, lastUpdatedAt: now,
       ...(type === "voice" ? { voiceTranscript: { status: "pending", source: "douyin-native" } } : {})
     };
@@ -192,13 +201,14 @@
     const now = Date.now();
     const previous = records.get(dataIndex);
     const oldVoice = previous?.voiceTranscript;
-    if (oldVoice?.status === "manual_required" && oldVoice.baselineText &&
-        next.visibleText !== oldVoice.baselineText && next.visibleText.startsWith(oldVoice.baselineText)) {
-      const added = next.visibleText.slice(oldVoice.baselineText.length).trim();
+    const baseline = oldVoice?.baselineText || (oldVoice?.status === "pending" ? previous?.visibleText : null);
+    if (["manual_required", "pending"].includes(oldVoice?.status) && baseline &&
+        next.visibleText !== baseline && next.visibleText.startsWith(baseline)) {
+      const added = next.visibleText.slice(baseline.length).trim();
       if (added.length >= 2) {
         previous.voiceTranscript = {
           source: "douyin-native", status: "success", text: added,
-          confidence: "manual-dom-appended-text", requiresReview: true
+          confidence: "late-dom-appended-text", requiresReview: true
         };
       }
     }
@@ -258,11 +268,14 @@
     const span = core.coverage(entries.map(item => item.dataIndex));
     const stable = entries.filter(entry => entry.captureConfidence === "stable").length;
     const voices = entries.filter(entry => entry.type === "voice").length;
+    const voiceSuccess = entries.filter(entry => entry.type === "voice" && entry.voiceTranscript?.status === "success").length;
+    const voiceManual = entries.filter(entry => entry.type === "voice" && entry.voiceTranscript?.status === "manual_required").length;
     $("progress").textContent = [
       `阶段：${run.phase}    自动滚动步数：${run.step}`,
       `列表项：${entries.length}（稳定 ${stable}）`,
       `索引范围：${span.minIndex ?? "?"}–${span.maxIndex ?? "?"}，缺口 ${span.gapCount}`,
-      `识别语音：${voices}，原生菜单：${run.nativeMenuSupport}`,
+      `识别语音：${voices}；已转写：${voiceSuccess}；待手工：${voiceManual}；其余待确认：${voices - voiceSuccess - voiceManual}`,
+      `原生语音菜单：${run.nativeMenuSupport}`,
       `已知异常：${failed.size}，本地存储：${run.storageFailure ? "失败，请下载文件" : "正常"}`,
       `历史终点：${run.oldestBoundaryEvidence}`
     ].join("\n");
@@ -281,7 +294,7 @@
 
   function checkpoint() {
     return {
-      schemaVersion: "0.2.0-rc.1", tag: run.tag, url: run.startedUrl, savedAt: new Date().toISOString(),
+      schemaVersion: "0.3.0-rc.1", tag: run.tag, url: run.startedUrl, savedAt: new Date().toISOString(),
       startedAt: run.startedAt, startedFromNewest: run.startedFromNewest,
       oldestBoundaryEvidence: run.oldestBoundaryEvidence, step: run.step,
       scrollerTop: scroller.scrollTop, entries: [...records.values()],
@@ -307,13 +320,26 @@
     }
   }
 
-  function visibleNativeMenuItem() {
-    const commands = [...document.querySelectorAll('[role="menuitem"], [role="menu"] button, [role="menu"] li')];
-    return commands.find(node => {
-      const text = (node.innerText || "").trim();
+  function visibleNativeMenuItem(origin) {
+    // Douyin menus may be rendered as portal div/span elements with no ARIA role.
+    // Only select an exact, visible label OUTSIDE chat rows and close to the
+    // voice bubble that was just right-clicked, never arbitrary chat content.
+    const commands = [...document.querySelectorAll('[role="menuitem"], button, li, div, span')];
+    const found = commands.filter(node => {
+      if (list.contains(node) || node.closest?.('[contenteditable="true"]')) return false;
+      const value = (node.innerText || "").trim();
+      if (!/^(?:转成文字|语音转文字|转文字)$/.test(value)) return false;
       const rect = node.getBoundingClientRect();
-      return /^(?:转成文字|语音转文字|转文字)$/.test(text) && rect.width > 0 && rect.height > 0;
-    }) || null;
+      if (rect.width < 1 || rect.height < 1) return false;
+      const dx = Math.max(rect.left - origin.x, origin.x - rect.right, 0);
+      const dy = Math.max(rect.top - origin.y, origin.y - rect.bottom, 0);
+      return dx < 520 && dy < 520;
+    });
+    return found.sort((a, b) => {
+      const aa = a.getBoundingClientRect();
+      const bb = b.getBoundingClientRect();
+      return aa.width * aa.height - bb.width * bb.height;
+    })[0] || null;
   }
 
   function appendedTranscript(before, after) {
@@ -323,6 +349,21 @@
       return remainder.length >= 2 ? remainder : null;
     }
     return null;
+  }
+
+  async function trustedClick(target, button) {
+    if (!$("trustedVoice").checked || !target) return false;
+    const rect = target.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) return false;
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: "DOUYIN_EXPORT_TRUSTED_MOUSE", button,
+        x: rect.left + rect.width / 2, y: rect.top + rect.height / 2
+      });
+      return result?.ok === true;
+    } catch {
+      return false;
+    }
   }
 
   async function tryNativeTranscribe(row) {
@@ -340,14 +381,22 @@
       return;
     }
     const rect = target.getBoundingClientRect();
+    const origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     try {
       target.dispatchEvent(new MouseEvent("contextmenu", {
         bubbles: true, cancelable: true, view: window, button: 2, buttons: 2,
-        clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2
+        clientX: origin.x, clientY: origin.y
       }));
       await wait(200);
       if (run.phase !== "running" || !row.isConnected) return;
-      const action = visibleNativeMenuItem();
+      let action = visibleNativeMenuItem(origin);
+      if (!action && $("trustedVoice").checked) {
+        const sent = await trustedClick(target, "right");
+        if (sent) {
+          await wait(250);
+          action = visibleNativeMenuItem(origin);
+        }
+      }
       if (!action) {
         run.nativeMenuSupport = "unsupported";
         const entry = records.get(idx);
@@ -356,8 +405,8 @@
           reason: "程序触发的右键菜单未出现；请在浏览器中手动右键语音后再重扫。" };
         return;
       }
-      run.nativeMenuSupport = "supported";
-      action.click();
+      run.nativeMenuSupport = $("trustedVoice").checked ? "enhanced-or-synthetic" : "synthetic";
+      if (!await trustedClick(action, "left")) action.click();
       let text = null;
       for (let i = 0; i < 20 && !text && run.phase === "running"; i++) {
         await wait(200);
@@ -367,7 +416,8 @@
       const entry = records.get(idx);
       if (entry) entry.voiceTranscript = text
         ? { source: "douyin-native", status: "success", text, confidence: "dom-appended-text" }
-        : { source: "douyin-native", status: "pending", reason: "菜单已点击但尚未提取到对应转写文字" };
+        : { source: "douyin-native", status: "pending", baselineText: previousText,
+          reason: "菜单已点击但尚未提取到对应转写文字，后续重扫会继续查找" };
     } catch {
       const entry = records.get(idx);
       if (entry) entry.voiceTranscript = { source: "douyin-native", status: "failed", reason: "网页右键/转写操作异常" };
@@ -480,6 +530,8 @@
     prepared = prepareArchive();
     $("json").hidden = false;
     $("txt").hidden = false;
+    $("html").hidden = false;
+    $("rawtxt").hidden = false;
     $("start").disabled = false;
     $("restore").hidden = true;
     setState(`已停止并准备导出：${prepared.capture.state}。请下载文件并查看单独的语音转写状态。`);
@@ -498,6 +550,8 @@
     prepared = null;
     $("json").hidden = true;
     $("txt").hidden = true;
+    $("html").hidden = true;
+    $("rawtxt").hidden = true;
     run.tag = tag;
     run.startedAt = new Date().toISOString();
     run.startedUrl = location.href;
@@ -523,6 +577,9 @@
   async function restore() {
     const data = checkpointLoaded;
     if (!data || !data.entries?.length) return setState("没有可恢复的本地断点。");
+    if (data.schemaVersion !== "0.3.0-rc.1") {
+      return setState("该断点来自旧版，语音曾被误判为普通文字。要补全原生语音转写，请保留已下载备份并从最近消息重新采集。");
+    }
     const tag = $("tag").value.trim();
     if (tag !== data.tag) return setState("会话标签与保存的断点不一致，请输入相同标签再恢复。");
     if (location.href !== data.url) return setState("当前网页地址与保存断点不同，拒绝恢复，以免混合会话。");
@@ -600,6 +657,12 @@
     if (prepared) download(JSON.stringify(prepared, null, 2), "json", "application/json;charset=utf-8");
   });
   $("txt").addEventListener("click", () => {
+    if (prepared) download(core.renderReadableTxt(prepared), "txt", "text/plain;charset=utf-8");
+  });
+  $("html").addEventListener("click", () => {
+    if (prepared) download(core.renderReadableHtml(prepared), "html", "text/html;charset=utf-8");
+  });
+  $("rawtxt").addEventListener("click", () => {
     if (prepared) download(core.renderTxt(prepared), "txt", "text/plain;charset=utf-8");
   });
   $("clear").addEventListener("click", async () => {
@@ -625,7 +688,12 @@
     checkpointLoaded = saved;
     $("restore").hidden = false;
     $("tag").value = saved.tag;
-    setState(`检测到本地断点：${saved.entries.length} 个列表项；请确认聊天对象后选择恢复或重新开始。`);
+    setState(saved.schemaVersion === "0.3.0-rc.1"
+      ? `检测到本地断点：${saved.entries.length} 个列表项；确认聊天对象后可恢复。`
+      : `检测到旧版断点：${saved.entries.length} 个列表项。新版修复了语音识别，建议重新开始以补全语音。`);
   }).catch(() => setState("无法访问浏览器本地断点存储。仍可新建采集，但不能保证恢复功能。"));
+  void chrome.storage.local.get("douyin_voice_enhanced_opt_in").then(result => {
+    $("trustedVoice").checked = result.douyin_voice_enhanced_opt_in === true;
+  }).catch(() => { $("trustedVoice").checked = false; });
   controls();
 })();

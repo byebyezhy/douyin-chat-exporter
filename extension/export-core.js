@@ -19,7 +19,10 @@
 
   function typeFromSignals({ visibleText = "", voiceHint = false, image = 0, largeImages = 0, video = 0, canvas = 0, timeLabel = false } = {}) {
     if (timeLabel) return "system";
-    if (voiceHint) return "voice";
+    // Real Douyin sample: voice bubbles with waveform canvas have a bare
+    // duration such as 28", 6", 1". Canvas alone is NOT a voice signal:
+    // it appears in ordinary text messages too.
+    if (voiceHint || (canvas > 0 && /^\d{1,3}\s*["″”]$/.test(visibleText.trim()))) return "voice";
     if (video > 0) return "video";
     if (largeImages > 0) return "image";
     if (visibleText.trim()) return "text";
@@ -94,7 +97,7 @@
   function buildArchive({ entries, runtime, conversationTag, createdAt, stoppedAt }) {
     const ordered = [...entries].sort((a, b) => b.dataIndex - a.dataIndex);
     return {
-      schemaVersion: "0.2.0-rc.1",
+      schemaVersion: "0.3.0-rc.1",
       platform: "douyin",
       scope: "one-user-selected-chat",
       conversation: { localTag: conversationTag, platformIdVerified: false },
@@ -143,5 +146,85 @@
     return lines.join("\n");
   }
 
-  globalThis.__DOUYIN_EXPORT_CORE_V020__ = Object.freeze({ coverage, typeFromSignals, parseTime, summarize, voiceSummary, buildArchive, renderTxt });
+  function readableItems(archive) {
+    const items = [];
+    for (const entry of archive.entries) {
+      const visible = (entry.visibleText || "").trim();
+      if (entry.type === "voice" || /^\d{1,3}\s*["″”]$/.test(visible) && entry.mediaMarkers?.canvas > 0) {
+        const transcript = entry.voiceTranscript;
+        if (transcript?.status === "success" && transcript.text?.trim()) {
+          items.push({ kind: "voice", sender: entry.sender || "unknown", text: transcript.text.trim() });
+        } else {
+          items.push({ kind: "voice-pending", sender: entry.sender || "unknown" });
+        }
+        continue;
+      }
+      if (/^\d{2}\/\d{2}$/.test(visible) || entry.type === "system") {
+        if (visible) items.push({ kind: "date", text: visible });
+        continue;
+      }
+      if (["image", "video", "unknown_media", "other"].includes(entry.type) || !visible ||
+          /^(?:\[?红包\]?|\[?图片\]?|\[?视频\]?|分享的视频|查看视频|领取红包)$/.test(visible)) {
+        items.push({ kind: "other" });
+        continue;
+      }
+      items.push({ kind: "text", sender: entry.sender || "unknown", text: visible });
+    }
+    return items;
+  }
+
+  function readableBlocks(archive) {
+    const source = readableItems(archive);
+    const blocks = [];
+    for (const item of source) {
+      // Multiple adjacent non-text entries become one unobtrusive placeholder.
+      if (item.kind === "other" && blocks.at(-1)?.kind === "other") {
+        blocks.at(-1).count++;
+      } else {
+        blocks.push(item.kind === "other" ? { kind: "other", count: 1 } : item);
+      }
+    }
+    return blocks;
+  }
+
+  function renderReadableTxt(archive) {
+    const lines = [
+      "抖音聊天记录",
+      `会话：${archive.conversation?.localTag || "未命名会话"}`,
+      "按时间方向：较早 → 较近",
+      ""
+    ];
+    let untranscribed = 0;
+    for (const item of readableBlocks(archive)) {
+      if (item.kind === "date") lines.push(`──── ${item.text} ────`);
+      else if (item.kind === "text") lines.push(`${item.sender === "self" ? "我：" : item.sender === "peer" ? "对方：" : ""}${item.text}`);
+      else if (item.kind === "voice") lines.push(`${item.sender === "self" ? "我：" : item.sender === "peer" ? "对方：" : ""}🎤 ${item.text}`);
+      else if (item.kind === "voice-pending") untranscribed++;
+      else if (item.kind === "other") lines.push(item.count === 1 ? "〔其他消息〕" : `〔其他消息 × ${item.count}〕`);
+      if (item.kind !== "voice-pending") lines.push("");
+    }
+    if (untranscribed) lines.push(`注：${untranscribed} 条语音尚未转成文字（详情请查看 JSON 完整性报告）。`);
+    return lines.join("\n").trimEnd() + "\n";
+  }
+
+  function renderReadableHtml(archive) {
+    const safe = text => String(text ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    let pending = 0;
+    const elements = [];
+    for (const item of readableBlocks(archive)) {
+      if (item.kind === "date") elements.push(`<div class="date">${safe(item.text)}</div>`);
+      else if (item.kind === "text" || item.kind === "voice") {
+        const side = item.sender === "self" ? "self" : item.sender === "peer" ? "peer" : "unknown";
+        const badge = item.kind === "voice" ? "<span class=\"voice\">🎤 语音转写</span>" : "";
+        elements.push(`<div class="line ${side}"><div class="bubble">${badge}<div>${safe(item.text)}</div></div></div>`);
+      } else if (item.kind === "other") elements.push(`<div class="muted">${item.count === 1 ? "其他消息" : `其他消息 × ${item.count}`}</div>`);
+      else if (item.kind === "voice-pending") pending++;
+    }
+    const note = pending ? `<p class="notice">${pending} 条语音未转成文字；完整状态见 JSON。</p>` : "";
+    return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>抖音聊天记录</title><style>*{box-sizing:border-box}body{font:15px/1.7 system-ui,sans-serif;background:#f4f6fb;color:#243244;margin:0}header{padding:24px 16px;text-align:center;background:white;border-bottom:1px solid #ddd}h1{font-size:20px;margin:0}small{color:#77839a}main{max-width:820px;margin:auto;padding:22px 14px}.line{display:flex;margin:12px 0}.line.self{justify-content:flex-end}.line.peer{justify-content:flex-start}.line.unknown{justify-content:center}.bubble{max-width:min(78%,620px);background:white;padding:11px 15px;border-radius:15px;box-shadow:0 1px 5px #1223;white-space:pre-wrap;overflow-wrap:anywhere}.self .bubble{background:#d6edff}.unknown .bubble{background:#e9edf4}.date,.muted{text-align:center;color:#8a96a8;margin:16px 0;font-size:12px}.voice{font-size:12px;color:#1768a7;display:block;margin-bottom:5px}.notice{margin-top:30px;color:#865318;background:#fff5dd;padding:12px;border-radius:10px}</style></head><body><header><h1>抖音聊天记录</h1><small>${safe(archive.conversation?.localTag || "未命名会话")} · 较早 → 较近</small></header><main>${elements.join("\n")}${note}</main></body></html>`;
+  }
+
+  globalThis.__DOUYIN_EXPORT_CORE_V020__ = Object.freeze({ coverage, typeFromSignals, parseTime, summarize, voiceSummary, buildArchive, renderTxt,
+    readableItems, readableBlocks, renderReadableTxt, renderReadableHtml });
 })();

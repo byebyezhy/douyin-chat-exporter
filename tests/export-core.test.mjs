@@ -36,9 +36,45 @@ test("没有验证的消息 ID，哪怕有可见最早边界也不报 complete",
 
 test("消息类型识别谨慎，未知媒体不冒充文字", () => {
   assert.equal(core.typeFromSignals({ voiceHint: true, visibleText: "12秒" }), "voice");
+  assert.equal(core.typeFromSignals({ visibleText: '28"', canvas: 1 }), "voice");
+  assert.equal(core.typeFromSignals({ visibleText: '1"', canvas: 0 }), "text");
+  assert.equal(core.typeFromSignals({ visibleText: "你好", canvas: 1 }), "text");
   assert.equal(core.typeFromSignals({ canvas: 1 }), "unknown_media");
   assert.equal(core.typeFromSignals({ largeImages: 1 }), "image");
   assert.equal(core.typeFromSignals({ visibleText: "你好" }), "text");
+});
+
+test("阅读版去掉索引/时间未知/媒体计数，保留文字与语音并合并其他消息", () => {
+  const archive = core.buildArchive({
+    entries: [
+      row(5, { visibleText: "你好", sender: "peer" }),
+      row(4, { type: "image", visibleText: "", mediaMarkers: { image: 2 } }),
+      row(3, { type: "unknown_media", visibleText: "" }),
+      row(2, { type: "voice", visibleText: '28"\n我来了', voiceTranscript: { status: "success", text: "我来了" }, sender: "self" }),
+      row(1, { type: "voice", visibleText: '6"', voiceTranscript: { status: "manual_required" } }),
+      row(0, { visibleText: "再见", sender: "self" })
+    ],
+    conversationTag: "演示", createdAt: "start", stoppedAt: "stop", runtime: {}
+  });
+  const text = core.renderReadableTxt(archive);
+  assert.match(text, /对方：你好/);
+  assert.match(text, /〔其他消息 × 2〕/);
+  assert.match(text, /我：🎤 我来了/);
+  assert.match(text, /1 条语音尚未转成文字/);
+  assert.doesNotMatch(text, /索引|时间未知|媒体标记|28"|6"/);
+  assert.ok(text.indexOf("你好") < text.indexOf("我来了"));
+});
+
+test("离线 HTML 阅读版对私聊文字严格转义，不含远程资源", () => {
+  const archive = core.buildArchive({
+    entries: [row(0, { visibleText: '<script>alert("danger")</script> & test' })],
+    runtime: {}, conversationTag: "测试", createdAt: "start", stoppedAt: "stop"
+  });
+  const html = core.renderReadableHtml(archive);
+  assert.ok(html.includes("&lt;script&gt;"));
+  assert.ok(!html.includes('<script>alert("danger")</script>'));
+  assert.match(html, /default-src 'none'/);
+  assert.doesNotMatch(html, /<script\b|https?:\/\//i);
 });
 
 test("时间解析不猜测没有时区的日期", () => {

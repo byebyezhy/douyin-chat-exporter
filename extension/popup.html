@@ -10,16 +10,19 @@
   <main>
     <header>
       <h1>抖音聊天导出助手</h1>
-      <span class="badge">v0.2 候选版</span>
+      <span class="badge">v0.3 候选版</span>
     </header>
-    <p>单会话自动滚动、持续采集、本地断点、消息分类与原生语音转写尝试。<strong>不确定的消息与转写会明确标记，不能保证完整历史。</strong></p>
-    <button type="button" id="full-export">启动 v0.2.0 自动导出</button>
+    <p>单会话自动滚动、聊天文字与语音转写、简洁 TXT/HTML 阅读版。<strong>完整性未验证时会明确提示。</strong></p>
+    <button type="button" id="full-export">启动 v0.3.0 自动导出</button>
+    <button type="button" id="voice-grant" class="secondary-action">启用增强语音右键（可选授权）</button>
+    <button type="button" id="voice-revoke" class="secondary-action">撤销增强语音权限</button>
+    <p id="voice-permission-state" class="hint">增强语音操作需要浏览器调试权限；仅在你授权后用于当前抖音页面模拟鼠标操作，可能出现浏览器调试提示。</p>
     <button type="button" id="diagnose" class="secondary-action">检测当前页面（诊断）</button>
     <button type="button" id="monitor" class="secondary-action">开始连续索引测试</button>
     <button type="button" id="capture" class="secondary-action">开始本地聊天文字采集（实验）</button>
     <div id="status" role="status" aria-live="polite">请先打开抖音网页版并登录。</div>
     <pre id="result" hidden></pre>
-    <p class="hint">旧版诊断功能保留，测试面板请勿同时开启。自动导出会将断点保存到浏览器扩展本地存储，并提供删除按钮；不会联网发送数据。请勿上传包含私人聊天的文件。</p>
+    <p class="hint">增强语音权限较高，完全可选；不授予仍可导出文字。旧版诊断保留，面板不要同时开启。断点仅留在浏览器本地；请勿上传私人聊天记录。</p>
   </main>
   <script src="popup.js"></script>
 </body>

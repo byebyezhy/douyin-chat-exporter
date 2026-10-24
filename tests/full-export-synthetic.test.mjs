@@ -14,21 +14,28 @@ test("v0.2 content script can auto-scroll and checkpoint overlapping virtual row
   let manuallyConvertedVoice = "合成语音 8秒";
   let nativeMenuVisible = false;
   const scrollerHeight = 6000;
-  const list = { children: [], isConnected: true };
+  const list = { children: [], isConnected: true, contains: () => false };
   const voiceTarget = (index) => ({
     tagName: "BUTTON",
     getAttribute: name => name === "aria-label" ? "播放语音" : null,
     getBoundingClientRect: () => ({ left: 400, top: 300, width: 80, height: 35 }),
     dispatchEvent() { nativeMenuVisible = index === 2; }
   });
+  const genericCanvas = { tagName: "CANVAS", parentElement: voiceTarget(4) };
+  const durationLabel = { innerText: '28"', parentElement: voiceTarget(4), closest: () => null };
   const node = (index) => ({
     nodeType: 1, isConnected: true, parentElement: list, tagName: "DIV",
-    get innerText() { return index === 2 ? voiceText : index === 3 ? manuallyConvertedVoice : `合成消息${index}`; },
+    get innerText() { return index === 2 ? voiceText : index === 3 ? manuallyConvertedVoice : index === 4 ? '28"' : `合成消息${index}`; },
     hasAttribute: name => name === "data-index",
     getAttribute: name => name === "data-index" ? String(index) : null,
     matches: () => false,
-    querySelector: () => null,
-    querySelectorAll: selector => [2, 3].includes(index) && selector.includes("[aria-label]") ? [voiceTarget(index)] : [],
+    querySelector: selector => selector === "canvas" && [4, 5].includes(index) ? genericCanvas : null,
+    querySelectorAll: selector => {
+      if ([2, 3].includes(index) && selector.includes("[aria-label]")) return [voiceTarget(index)];
+      if ([4, 5].includes(index) && selector === "canvas") return [genericCanvas];
+      if (index === 4 && selector === "span,p,button,div") return [durationLabel];
+      return [];
+    },
     getBoundingClientRect: () => ({ left: 370, right: 560, width: 190, height: 35 })
   });
   function renderRows() {
@@ -61,7 +68,7 @@ test("v0.2 content script can auto-scroll and checkpoint overlapping virtual row
       if (selector === "*") return [scroller];
       if (selector.startsWith('[role="menuitem"]') && nativeMenuVisible) return [{
         innerText: "转成文字",
-        getBoundingClientRect: () => ({ width: 100, height: 35 }),
+        getBoundingClientRect: () => ({ left: 400, right: 500, top: 300, bottom: 335, width: 100, height: 35 }),
         click() { voiceText += "\n合成转写结果"; nativeMenuVisible = false; }
       }];
       return [];
@@ -94,6 +101,7 @@ test("v0.2 content script can auto-scroll and checkpoint overlapping virtual row
 
   control("tag").value = "合成测试会话";
   control("voice").checked = true;
+  control("trustedVoice").checked = false;
   await control("start").handlers.click();
   for (let spin = 0; spin < 300; spin++) await Promise.resolve();
 
@@ -110,6 +118,8 @@ test("v0.2 content script can auto-scroll and checkpoint overlapping virtual row
   const manual = saved.entries.find(x => x.dataIndex === 3);
   assert.equal(manual.type, "voice");
   assert.equal(manual.voiceTranscript?.status, "manual_required", "untrusted contextmenu may be rejected");
+  assert.equal(saved.entries.find(x => x.dataIndex === 4).type, "voice", "recognizes 28-inch-like voice duration with canvas");
+  assert.equal(saved.entries.find(x => x.dataIndex === 5).type, "text", "does not treat canvas alone as voice");
   assert.match(control("state").textContent, /partial|incomplete/);
   scroller.scrollTop = 0;
   manuallyConvertedVoice += "\n手动显示的转写内容";
@@ -120,6 +130,7 @@ test("v0.2 content script can auto-scroll and checkpoint overlapping virtual row
   assert.equal(saved.startedFromNewest, true);
   assert.equal(control("json").hidden, false, "offers a local JSON export after the scan stops");
   assert.equal(control("txt").hidden, false);
+  assert.equal(control("html").hidden, false);
 
   // Simulate a later extension injection: checkpoint must be detected and
   // explicitly confirmed before resuming the same user-tagged conversation.

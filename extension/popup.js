@@ -231,3 +231,43 @@ document.querySelector("#full-export").addEventListener("click", async () => {
     control.disabled = false;
   }
 });
+
+const permissionLabel = document.querySelector("#voice-permission-state");
+const VOICE_OPTION_KEY = "douyin_voice_enhanced_opt_in";
+
+async function refreshVoicePermission() {
+  try {
+    const granted = await chrome.permissions.contains({ permissions: ["debugger"] });
+    permissionLabel.textContent = granted
+      ? "增强语音权限已授权。启动导出时仍可在面板中单独关闭可信右键。"
+      : "增强语音权限未授权；基本文字导出照常可用。";
+  } catch {
+    permissionLabel.textContent = "无法确认增强权限状态；基本文字导出不受影响。";
+  }
+}
+
+document.querySelector("#voice-grant").addEventListener("click", async () => {
+  // The permission request itself MUST occur directly inside a user gesture.
+  try {
+    const request = chrome.permissions.request({ permissions: ["debugger"] });
+    const granted = await request;
+    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: Boolean(granted) });
+    permissionLabel.textContent = granted
+      ? "已获得权限：仅当前抖音页面的语音右键会请求可信鼠标操作。可随时撤销。"
+      : "你拒绝了调试权限：只使用普通网页操作，文字导出不受影响。";
+  } catch {
+    permissionLabel.textContent = "请求调试权限失败；仍可以不授权方式导出。";
+  }
+});
+
+document.querySelector("#voice-revoke").addEventListener("click", async () => {
+  try {
+    await chrome.permissions.remove({ permissions: ["debugger"] });
+    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: false });
+    await refreshVoicePermission();
+  } catch {
+    permissionLabel.textContent = "撤销失败，请在浏览器扩展管理页面检查权限。";
+  }
+});
+
+void refreshVoicePermission();
