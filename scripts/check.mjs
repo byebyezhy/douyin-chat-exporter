@@ -11,9 +11,8 @@ if (!manifest.action?.default_popup) throw new Error("Missing popup");
 for (const name of manifest.permissions || []) {
   if (!allowed.has(name)) throw new Error(`Unexpected permission: ${name}`);
 }
-if (JSON.stringify(manifest.optional_permissions || []) !== JSON.stringify(["debugger"])) {
-  throw new Error("Trusted mouse must use ONLY optional debugger permission");
-}
+if ((manifest.optional_permissions || []).length) throw new Error("Standard build cannot ask optional permissions");
+if (manifest.background) throw new Error("Standard build cannot run a debugger service worker");
 if ((manifest.host_permissions || []).length) throw new Error("Persistent host permissions are prohibited");
 execFileSync(process.execPath, ["--check", join(root, "extension", "popup.js")], { stdio: "inherit" });
 execFileSync(process.execPath, ["--check", join(root, "extension", "index-monitor.js")], { stdio: "inherit" });

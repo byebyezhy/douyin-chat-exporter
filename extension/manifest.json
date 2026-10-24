@@ -1,12 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "抖音聊天导出助手（v0.3 候选版）",
-  "description": "自动导出单会话、文字与语音转写、简洁 TXT/HTML 阅读版；可选的可信右键仅在用户授权后使用。",
-  "version": "0.3.0",
+  "name": "抖音聊天导出助手（普通版）",
+  "description": "本地导出单会话聊天、简洁 TXT/HTML 阅读版；使用最小权限，支持手动原生语音转写。",
+  "version": "0.3.1",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage"],
-  "optional_permissions": ["debugger"],
-  "background": { "service_worker": "voice-debugger.js" },
   "action": {
     "default_title": "抖音聊天导出助手",
     "default_popup": "popup.html"

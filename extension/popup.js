@@ -217,7 +217,7 @@ document.querySelector("#capture").addEventListener("click", async () => {
 document.querySelector("#full-export").addEventListener("click", async () => {
   const control = document.querySelector("#full-export");
   control.disabled = true;
-  status.textContent = "正在打开完整功能候选版……";
+  status.textContent = "正在打开 v0.3.1 导出面板……";
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https:\/\/([a-z0-9-]+\.)*douyin\.com(?:\/|$)/i.test(tab.url || "")) {
@@ -234,39 +234,51 @@ document.querySelector("#full-export").addEventListener("click", async () => {
 
 const permissionLabel = document.querySelector("#voice-permission-state");
 const VOICE_OPTION_KEY = "douyin_voice_enhanced_opt_in";
+const enhancedVariant = chrome.runtime.getManifest().permissions.includes("debugger");
+const enableVoice = document.querySelector("#voice-enable");
+const disableVoice = document.querySelector("#voice-disable");
+enableVoice.hidden = !enhancedVariant;
+disableVoice.hidden = !enhancedVariant;
 
 async function refreshVoicePermission() {
   try {
+    if (!enhancedVariant) {
+      permissionLabel.textContent = "当前安装的是普通版：无调试器权限。若要自动尝试真实右键，请安装单独的增强语音版。";
+      return;
+    }
     const granted = await chrome.permissions.contains({ permissions: ["debugger"] });
-    permissionLabel.textContent = granted
-      ? "增强语音权限已授权。启动导出时仍可在面板中单独关闭可信右键。"
-      : "增强语音权限未授权；基本文字导出照常可用。";
+    if (!granted) {
+      permissionLabel.textContent = "增强版缺少安装时所需的 debugger 权限，请在 Edge 扩展页重新加载并确认权限。";
+      return;
+    }
+    const option = await chrome.storage.local.get(VOICE_OPTION_KEY);
+    permissionLabel.textContent = option[VOICE_OPTION_KEY] === true
+      ? "增强版已安装，可信右键操作已开启；导出面板中仍可单独关闭。"
+      : "增强版已安装，已授予 debugger 强权限，但可信右键操作处于关闭状态；点上方按钮后启用。";
   } catch {
-    permissionLabel.textContent = "无法确认增强权限状态；基本文字导出不受影响。";
+    permissionLabel.textContent = "无法确认增强版调试权限；普通文字导出不受影响。";
   }
 }
 
-document.querySelector("#voice-grant").addEventListener("click", async () => {
-  // The permission request itself MUST occur directly inside a user gesture.
+enableVoice.addEventListener("click", async () => {
   try {
-    const request = chrome.permissions.request({ permissions: ["debugger"] });
-    const granted = await request;
-    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: Boolean(granted) });
-    permissionLabel.textContent = granted
-      ? "已获得权限：仅当前抖音页面的语音右键会请求可信鼠标操作。可随时撤销。"
-      : "你拒绝了调试权限：只使用普通网页操作，文字导出不受影响。";
+    if (!enhancedVariant || !await chrome.permissions.contains({ permissions: ["debugger"] })) {
+      permissionLabel.textContent = "当前没有 debugger 权限；需要加载增强版并在安装时授权。";
+      return;
+    }
+    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: true });
+    await refreshVoicePermission();
   } catch {
-    permissionLabel.textContent = "请求调试权限失败；仍可以不授权方式导出。";
+    permissionLabel.textContent = "开启增强操作失败；普通文字导出不受影响。";
   }
 });
 
-document.querySelector("#voice-revoke").addEventListener("click", async () => {
+disableVoice.addEventListener("click", async () => {
   try {
-    await chrome.permissions.remove({ permissions: ["debugger"] });
     await chrome.storage.local.set({ [VOICE_OPTION_KEY]: false });
     await refreshVoicePermission();
   } catch {
-    permissionLabel.textContent = "撤销失败，请在浏览器扩展管理页面检查权限。";
+    permissionLabel.textContent = "关闭增强操作失败，请在浏览器扩展管理页面停用扩展。";
   }
 });
 

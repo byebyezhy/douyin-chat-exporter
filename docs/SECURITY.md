@@ -9,6 +9,6 @@
 7. 一旦 M1 需要权限增加，必须在 PR 逐项解释原因并在验收中验证，不能悄悄扩展到 `<all_urls>`。
 8. 语音使用抖音网页自带的「转成文字」操作；不上传语音到第三方 AI/ASR 服务，不索取转写平台密钥。对失效/无法转写的条目保留失败状态。
 
-9. v0.3 提供可选 `debugger` 权限（不是默认必需权限）。用户必须在浏览器扩展弹窗通过手势主动授予；不授权仍可导出文字。服务工作线程只接收本扩展在 `https://www.douyin.com/` 顶层标签发送的有限点击请求，检查坐标及按键，仅调用 `Input.dispatchMouseEvent`，无任意 DevTools 命令、网络抓包或远程上传。每次鼠标操作后立即 detach。用户可随时撤销授权。
-10. `debugger` 属于高度敏感权限。发布前应公开审查 `extension/voice-debugger.js`、验证权限提示与实际行为；真实浏览器可能限制附加调试器，不能绕过限制。增强模式失败应保留 `manual_required`。
+9. **v0.3.1 修正了权限错误：** Chrome 官方明确禁止将 `debugger` 写入 `optional_permissions`。因此生成两个独立构建：普通版只需 `activeTab`、`scripting`、`storage`，无调试后台；增强版需在**安装时**获授 `debugger`，且用户需在扩展弹窗另行启用可信鼠标操作。普通版不拥有此强权限。
+10. 增强版的服务工作线程只接收本扩展在 `https://www.douyin.com/` 顶层标签发送的有限点击请求，检查坐标及按键，仅调用 `Input.dispatchMouseEvent`，无任意 DevTools 命令、网络抓包或远程上传。每次鼠标操作后立即 detach。`debugger` 属于高度敏感权限，关闭操作开关**不撤销权限**，如需撤销须卸载增强版、安装普通版。发布前应审查 `extension/voice-debugger.js`；真实浏览器可能限制附加调试器，不能绕过限制。失败时保留 `manual_required`。
 11. v0.3 HTML 阅读版仅包含转义后的纯文本和内联样式，内置 CSP `default-src 'none'`，不加载图片、脚本或外部资源。

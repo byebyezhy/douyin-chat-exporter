@@ -10,6 +10,7 @@
     return window.alert("请先关闭旧版索引/文字测试面板，再启动完整功能候选版。");
   }
   const STORE_KEY = "douyin_chat_export_v020_checkpoint";
+  const enhancedVariant = chrome.runtime?.getManifest?.()?.permissions?.includes("debugger") === true;
   const STABLE_MS = 180;
   const STEP_DELAY_MS = 450;
   const MAX_STEPS = 20000;
@@ -51,12 +52,12 @@
       small{display:block;margin-top:9px;color:#64748b}
     </style>
     <section>
-      <h2>抖音单会话自动导出 · v0.3.0 候选版</h2>
+      <h2>抖音单会话自动导出 · v0.3.1 候选版</h2>
       <p id="state">确认当前打开的是你要导出的一个私信会话。</p>
       <label for="tag">本地会话标签（用于防止续采混淆）</label>
       <input type="text" id="tag" maxlength="80" placeholder="例如：聊天对象A（仅保存在浏览器）">
       <label><input id="voice" type="checkbox" checked> 尝试使用抖音原生「转成文字」（失败则保留待处理状态）</label>
-      <label><input id="trustedVoice" type="checkbox"> 使用已授权的增强语音右键（可在插件弹窗中授权/撤销）</label>
+      <label><input id="trustedVoice" type="checkbox"> 启用增强版可信语音右键（须安装增强版并在弹窗中开启）</label>
       <button id="start">从最近消息开始自动采集</button>
       <button id="restore" class="secondary" hidden>恢复本地断点</button>
       <button id="pause" class="secondary" disabled>暂停</button>
@@ -71,7 +72,7 @@
       <button id="close" class="secondary">关闭面板</button>
       <p id="progress">等待开始……</p>
       <p id="warning">本工具只处理当前网页。文件和断点包含私人聊天，均留在本机。当前不能保证自动识别所有消息类型、语音或最早边界；遇到不确定情况明确报告。</p>
-      <small>不要切换聊天对象。增强语音会短暂附加到当前抖音标签执行可信鼠标事件，可能显示浏览器调试提示；仅在你授权且勾选后使用。插件不上传私聊，抖音原生转写由抖音处理语音。</small>
+      <small>不要切换聊天对象。增强版在安装时申请 debugger 强权限；勾选后会短暂附加到当前抖音标签执行可信鼠标事件，可能显示浏览器调试提示。关闭勾选不会撤销安装权限。插件不上传私聊，抖音原生转写由抖音处理语音。</small>
     </section>`;
   document.body.appendChild(host);
   const $ = id => shadow.getElementById(id);
@@ -352,7 +353,7 @@
   }
 
   async function trustedClick(target, button) {
-    if (!$("trustedVoice").checked || !target) return false;
+    if (!enhancedVariant || !$("trustedVoice").checked || !target) return false;
     const rect = target.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return false;
     try {
@@ -390,7 +391,7 @@
       await wait(200);
       if (run.phase !== "running" || !row.isConnected) return;
       let action = visibleNativeMenuItem(origin);
-      if (!action && $("trustedVoice").checked) {
+      if (!action && enhancedVariant && $("trustedVoice").checked) {
         const sent = await trustedClick(target, "right");
         if (sent) {
           await wait(250);
@@ -693,7 +694,8 @@
       : `检测到旧版断点：${saved.entries.length} 个列表项。新版修复了语音识别，建议重新开始以补全语音。`);
   }).catch(() => setState("无法访问浏览器本地断点存储。仍可新建采集，但不能保证恢复功能。"));
   void chrome.storage.local.get("douyin_voice_enhanced_opt_in").then(result => {
-    $("trustedVoice").checked = result.douyin_voice_enhanced_opt_in === true;
+    $("trustedVoice").disabled = !enhancedVariant;
+    $("trustedVoice").checked = enhancedVariant && result.douyin_voice_enhanced_opt_in === true;
   }).catch(() => { $("trustedVoice").checked = false; });
   controls();
 })();
