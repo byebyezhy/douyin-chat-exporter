@@ -22,7 +22,8 @@
 2. 在 Edge 打开 `edge://extensions`，或在 Chrome 打开 `chrome://extensions`。
 3. 开启「开发人员模式」→「加载解压缩的扩展程序」→ 选择 `dist/extension` 文件夹。
 4. 在浏览器中自行登录 `https://www.douyin.com/`，打开一位联系人的私信窗口。
-5. 点击扩展图标 →「检测当前页面」。只显示统计摘要，不采集对话正文。
+5. 点击扩展图标 →「检测当前页面」。只显示统计摘要，不采集对话正文。记下 `scrollableRegions` 中的 `scrollTop`。
+6. 在聊天历史区域向上滚动几屏，再次检测；两个结果中 `scrollTop` 发生变化的候选区域通常就是聊天滚动容器。
 
 Windows 上的 `npm run build` 需要 Node.js 22+；如没有 Node.js，可以直接将 `extension/` 作为解压缩扩展加载。
 
