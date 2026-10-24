@@ -217,7 +217,7 @@ document.querySelector("#capture").addEventListener("click", async () => {
 document.querySelector("#full-export").addEventListener("click", async () => {
   const control = document.querySelector("#full-export");
   control.disabled = true;
-  status.textContent = "正在打开 v0.3.1 导出面板……";
+  status.textContent = "正在打开网页滚动回退面板……";
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !/^https:\/\/([a-z0-9-]+\.)*douyin\.com(?:\/|$)/i.test(tab.url || "")) {
@@ -232,54 +232,25 @@ document.querySelector("#full-export").addEventListener("click", async () => {
   }
 });
 
-const permissionLabel = document.querySelector("#voice-permission-state");
-const VOICE_OPTION_KEY = "douyin_voice_enhanced_opt_in";
-const enhancedVariant = chrome.runtime.getManifest().permissions.includes("debugger");
-const enableVoice = document.querySelector("#voice-enable");
-const disableVoice = document.querySelector("#voice-disable");
-enableVoice.hidden = !enhancedVariant;
-disableVoice.hidden = !enhancedVariant;
-
-async function refreshVoicePermission() {
+document.querySelector("#api-export").addEventListener("click", async () => {
+  const control = document.querySelector("#api-export");
+  control.disabled = true;
+  status.textContent = "正在启动 IM API 历史采集……";
   try {
-    if (!enhancedVariant) {
-      permissionLabel.textContent = "当前安装的是普通版：无调试器权限。若要自动尝试真实右键，请安装单独的增强语音版。";
-      return;
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !/^https:\/\/www\.douyin\.com(?:\/|$)/i.test(tab.url || "")) {
+      throw new Error("请先打开 https://www.douyin.com/ 并选择一个私信会话。");
     }
-    const granted = await chrome.permissions.contains({ permissions: ["debugger"] });
-    if (!granted) {
-      permissionLabel.textContent = "增强版缺少安装时所需的 debugger 权限，请在 Edge 扩展页重新加载并确认权限。";
-      return;
-    }
-    const option = await chrome.storage.local.get(VOICE_OPTION_KEY);
-    permissionLabel.textContent = option[VOICE_OPTION_KEY] === true
-      ? "增强版已安装，可信右键操作已开启；导出面板中仍可单独关闭。"
-      : "增强版已安装，已授予 debugger 强权限，但可信右键操作处于关闭状态；点上方按钮后启用。";
-  } catch {
-    permissionLabel.textContent = "无法确认增强版调试权限；普通文字导出不受影响。";
-  }
-}
-
-enableVoice.addEventListener("click", async () => {
-  try {
-    if (!enhancedVariant || !await chrome.permissions.contains({ permissions: ["debugger"] })) {
-      permissionLabel.textContent = "当前没有 debugger 权限；需要加载增强版并在安装时授权。";
-      return;
-    }
-    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: true });
-    await refreshVoicePermission();
-  } catch {
-    permissionLabel.textContent = "开启增强操作失败；普通文字导出不受影响。";
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id }, world: "MAIN", files: ["im-core.js", "im-page-bridge.js"]
+    });
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id }, world: "ISOLATED", files: ["export-core.js", "im-core.js", "im-export.js"]
+    });
+    status.textContent = "API 面板已启动。请返回抖音页面；如果提示未捕获 IM 标识，先切换聊天再切回来。";
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : "启动 API 引擎失败";
+  } finally {
+    control.disabled = false;
   }
 });
-
-disableVoice.addEventListener("click", async () => {
-  try {
-    await chrome.storage.local.set({ [VOICE_OPTION_KEY]: false });
-    await refreshVoicePermission();
-  } catch {
-    permissionLabel.textContent = "关闭增强操作失败，请在浏览器扩展管理页面停用扩展。";
-  }
-});
-
-void refreshVoicePermission();

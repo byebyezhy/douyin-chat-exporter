@@ -20,4 +20,7 @@ execFileSync(process.execPath, ["--check", join(root, "extension", "local-captur
 execFileSync(process.execPath, ["--check", join(root, "extension", "export-core.js")], { stdio: "inherit" });
 execFileSync(process.execPath, ["--check", join(root, "extension", "full-export.js")], { stdio: "inherit" });
 execFileSync(process.execPath, ["--check", join(root, "extension", "voice-debugger.js")], { stdio: "inherit" });
+execFileSync(process.execPath, ["--check", join(root, "extension", "im-core.js")], { stdio: "inherit" });
+execFileSync(process.execPath, ["--check", join(root, "extension", "im-page-bridge.js")], { stdio: "inherit" });
+execFileSync(process.execPath, ["--check", join(root, "extension", "im-export.js")], { stdio: "inherit" });
 console.log("Manifest permission check passed");

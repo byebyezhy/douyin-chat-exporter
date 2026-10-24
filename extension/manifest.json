@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "抖音聊天导出助手（普通版）",
-  "description": "本地导出单会话聊天、简洁 TXT/HTML 阅读版；使用最小权限，支持手动原生语音转写。",
-  "version": "0.3.1",
+  "name": "抖音聊天导出助手",
+  "description": "单会话 IM API 历史与原生语音转写候选版，保留已验证的网页滚动导出回退。",
+  "version": "0.4.0",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {

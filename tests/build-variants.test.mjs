@@ -6,23 +6,18 @@ import { dirname, join, resolve } from "node:path";
 import "../scripts/build.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const standardDir = join(root, "dist", "extension");
-const enhancedDir = join(root, "dist", "extension-enhanced");
+const outputDir = join(root, "dist", "extension");
 
-test("普通版不包含任何调试器权限或后台；增强版只在安装时申请 debugger", async () => {
-  const standard = JSON.parse(await readFile(join(standardDir, "manifest.json"), "utf8"));
-  const enhanced = JSON.parse(await readFile(join(enhancedDir, "manifest.json"), "utf8"));
-  assert.deepEqual(standard.permissions, ["activeTab", "scripting", "storage"]);
-  assert.ok(!standard.optional_permissions);
-  assert.ok(!standard.background);
-  await assert.rejects(access(join(standardDir, "voice-debugger.js")));
-
-  assert.deepEqual(enhanced.permissions, ["activeTab", "scripting", "storage", "debugger"]);
-  assert.ok(!enhanced.optional_permissions);
-  assert.deepEqual(enhanced.background, { service_worker: "voice-debugger.js" });
-  await access(join(enhancedDir, "voice-debugger.js"));
-  assert.equal(standard.version, enhanced.version);
-
-  const popup = await readFile(join(enhancedDir, "popup.js"), "utf8");
+test("v0.4 单一发行包不含 debugger，携带 API 采集和旧版回退", async () => {
+  const manifest = JSON.parse(await readFile(join(outputDir, "manifest.json"), "utf8"));
+  assert.deepEqual(manifest.permissions, ["activeTab", "scripting", "storage"]);
+  assert.ok(!manifest.optional_permissions);
+  assert.ok(!manifest.background);
+  await assert.rejects(access(join(outputDir, "voice-debugger.js")));
+  for (const file of ["im-core.js", "im-page-bridge.js", "im-export.js", "full-export.js"]) {
+    await access(join(outputDir, file));
+  }
+  const popup = await readFile(join(outputDir, "popup.js"), "utf8");
+  assert.match(popup, /world: "MAIN"/);
   assert.doesNotMatch(popup, /permissions\.(?:request|remove)\s*\(/);
 });

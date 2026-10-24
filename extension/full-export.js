@@ -52,12 +52,12 @@
       small{display:block;margin-top:9px;color:#64748b}
     </style>
     <section>
-      <h2>抖音单会话自动导出 · v0.3.1 候选版</h2>
+      <h2>兼容模式 · 网页滚动导出</h2>
       <p id="state">确认当前打开的是你要导出的一个私信会话。</p>
       <label for="tag">本地会话标签（用于防止续采混淆）</label>
       <input type="text" id="tag" maxlength="80" placeholder="例如：聊天对象A（仅保存在浏览器）">
       <label><input id="voice" type="checkbox" checked> 尝试使用抖音原生「转成文字」（失败则保留待处理状态）</label>
-      <label><input id="trustedVoice" type="checkbox"> 启用增强版可信语音右键（须安装增强版并在弹窗中开启）</label>
+      <label hidden><input id="trustedVoice" type="checkbox"> 旧版增强语音右键（已停用）</label>
       <button id="start">从最近消息开始自动采集</button>
       <button id="restore" class="secondary" hidden>恢复本地断点</button>
       <button id="pause" class="secondary" disabled>暂停</button>
@@ -72,7 +72,7 @@
       <button id="close" class="secondary">关闭面板</button>
       <p id="progress">等待开始……</p>
       <p id="warning">本工具只处理当前网页。文件和断点包含私人聊天，均留在本机。当前不能保证自动识别所有消息类型、语音或最早边界；遇到不确定情况明确报告。</p>
-      <small>不要切换聊天对象。增强版在安装时申请 debugger 强权限；勾选后会短暂附加到当前抖音标签执行可信鼠标事件，可能显示浏览器调试提示。关闭勾选不会撤销安装权限。插件不上传私聊，抖音原生转写由抖音处理语音。</small>
+      <small>这是已验证正文采集的旧版回退入口，仅使用网页 DOM 滚动；建议优先测试 v0.4 API 引擎。不要切换聊天对象。本模式不会自动获得调试器权限，原生语音可手工转换后重扫。</small>
     </section>`;
   document.body.appendChild(host);
   const $ = id => shadow.getElementById(id);

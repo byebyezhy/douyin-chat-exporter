@@ -26,21 +26,13 @@ jobs:
         run: npm test
       - name: Build extension
         run: npm run build
-      - name: Package separate standard and enhanced variants
+      - name: Package v0.4 API-first extension
         run: |
           cd dist/extension
-          zip -qr ../douyin-chat-exporter-standard.zip .
-          cd ../extension-enhanced
-          zip -qr ../douyin-chat-exporter-enhanced.zip .
-      - name: Upload least-privileged standard extension
+          zip -qr ../douyin-chat-exporter-extension.zip .
+      - name: Upload API-first extension
         uses: actions/upload-artifact@v6
         with:
-          name: douyin-chat-exporter-standard
-          path: dist/douyin-chat-exporter-standard.zip
-          retention-days: 14
-      - name: Upload native-voice enhanced extension
-        uses: actions/upload-artifact@v6
-        with:
-          name: douyin-chat-exporter-enhanced
-          path: dist/douyin-chat-exporter-enhanced.zip
+          name: douyin-chat-exporter-extension
+          path: dist/douyin-chat-exporter-extension.zip
           retention-days: 14

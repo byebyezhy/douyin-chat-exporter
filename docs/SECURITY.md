@@ -12,3 +12,11 @@
 9. **v0.3.1 修正了权限错误：** Chrome 官方明确禁止将 `debugger` 写入 `optional_permissions`。因此生成两个独立构建：普通版只需 `activeTab`、`scripting`、`storage`，无调试后台；增强版需在**安装时**获授 `debugger`，且用户需在扩展弹窗另行启用可信鼠标操作。普通版不拥有此强权限。
 10. 增强版的服务工作线程只接收本扩展在 `https://www.douyin.com/` 顶层标签发送的有限点击请求，检查坐标及按键，仅调用 `Input.dispatchMouseEvent`，无任意 DevTools 命令、网络抓包或远程上传。每次鼠标操作后立即 detach。`debugger` 属于高度敏感权限，关闭操作开关**不撤销权限**，如需撤销须卸载增强版、安装普通版。发布前应审查 `extension/voice-debugger.js`；真实浏览器可能限制附加调试器，不能绕过限制。失败时保留 `manual_required`。
 11. v0.3 HTML 阅读版仅包含转义后的纯文本和内联样式，内置 CSP `default-src 'none'`，不加载图片、脚本或外部资源。
+
+## v0.4 API 引擎安全边界
+
+- v0.4 只需要 `activeTab`、`scripting`、`storage`，不包含 `debugger`、`webRequest`、持久域名权限或任何后台调试器；历史 `voice-debugger.js` 不会进入发布包。
+- 只有用户主动启动后才在抖音页面内观察原生 `get_by_conversation` 请求中的会话 ID 与 short ID；不读取 Cookie、Token、请求头或任何登录凭据。不能获取 ID 时停下，不会清空 SDK 缓存来强制触发请求。
+- 仅使用被用户选中的当前会话 ID 调用平台自己的 IM/原生语音接口。切换会话、缺少真实消息 ID 或游标不前进即停止。语音响应按真实 message_id 归属，不允许不明确的结果错位。
+- 网页内桥仅在本机网页与扩展之间传递必要消息；存档保存在浏览器扩展本地。抖音自身的 IM 与语音服务会按原有方式收到请求；插件不向开发者/第三方 ASR 上传聊天内容。
+- 该接口并非公开 SDK；不能把合成测试等同于真实 Edge 登录态成功。真实测试不得向公开仓库上传私人消息或鉴权信息。
