@@ -24,13 +24,16 @@ export function buildRawArchive({
   entries, startedAt, stoppedAt, transientChanges = [], confirmedConflicts = [],
   pendingStableChanges = [], failures = [], interrupted = false
 }) {
-  const ordered = [...entries].sort((a, b) => a.dataIndex - b.dataIndex);
+  // Based on the verified browser UI: index 0 is the newest, larger indexes
+  // are older. Treat this as a display-order rule, not a stable message ID.
+  const ordered = [...entries].sort((a, b) => b.dataIndex - a.dataIndex);
   const coverage = indexCoverage(ordered.map(item => item.dataIndex));
   return {
-    schemaVersion: "0.1.6-raw-preview",
+    schemaVersion: "0.1.7-raw-preview",
     platform: "douyin",
     source: "user-visible-webpage-dom",
     scope: "one-open-chat-list",
+    exportOrder: "oldest-first-by-observed-virtual-index",
     capturedAt: stoppedAt,
     capture: {
       status: "partial",
@@ -60,7 +63,7 @@ export function buildRawArchive({
 
 export function renderRawText(archive) {
   const lines = [
-    "抖音聊天列表原始采集 · 实验预览",
+    "抖音聊天列表原始采集 · 实验预览（较早在上，较近在下）",
     "注意：本文件不是已验证完整的消息备份。",
     `采集范围：${archive.capture.minIndex ?? "?"}–${archive.capture.maxIndex ?? "?"}；观察条目：${archive.capture.observedCount}`,
     `未观察索引：${archive.capture.unobservedIndexesInRange}；稳定冲突索引：${archive.capture.confirmedConflictIndexes.length}`,

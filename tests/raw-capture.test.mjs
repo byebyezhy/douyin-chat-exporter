@@ -23,20 +23,23 @@ test("空集合和缺口准确列示", () => {
   });
 });
 
-test("导出按列表位置排序，不臆造发送者或时间", () => {
+test("较大索引代表更早列表项，JSON 和 TXT 均按从旧到新输出", () => {
   const archive = buildRawArchive({
     entries: [
-      { dataIndex: 2, visibleText: "第二条", capturedAt: "T2", mediaMarkers: { img: 1 }, captureConfidence: "stable" },
-      { dataIndex: 1, visibleText: "第一条", capturedAt: "T1", mediaMarkers: {}, captureConfidence: "provisional" }
+      { dataIndex: 2, visibleText: "最早消息", capturedAt: "T2", mediaMarkers: { img: 1 }, captureConfidence: "stable" },
+      { dataIndex: 0, visibleText: "最新消息", capturedAt: "T0", mediaMarkers: {}, captureConfidence: "provisional" },
+      { dataIndex: 1, visibleText: "中间消息", capturedAt: "T1", mediaMarkers: {}, captureConfidence: "stable" }
     ],
     startedAt: "start", stoppedAt: "stop", confirmedConflicts: [2], transientChanges: [1, 2]
   });
-  assert.deepEqual(archive.entries.map(item => item.dataIndex), [1, 2]);
+  assert.deepEqual(archive.entries.map(item => item.dataIndex), [2, 1, 0]);
+  assert.equal(archive.exportOrder, "oldest-first-by-observed-virtual-index");
   assert.deepEqual(archive.capture.confirmedConflictIndexes, [2]);
   assert.deepEqual(archive.capture.transientTextVariationIndexes, [1, 2]);
-  assert.equal(archive.capture.stableEntries, 1);
+  assert.equal(archive.capture.stableEntries, 2);
   assert.equal(archive.capture.provisionalEntries, 1);
   const txt = renderRawText(archive);
-  assert.ok(txt.indexOf("第一条") < txt.indexOf("第二条"));
+  assert.ok(txt.indexOf("最早消息") < txt.indexOf("中间消息"));
+  assert.ok(txt.indexOf("中间消息") < txt.indexOf("最新消息"));
   assert.match(txt, /未识别发送者\/时间/);
 });

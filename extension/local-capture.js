@@ -39,7 +39,7 @@
         border-radius:6px;padding:8px;max-height:230px;overflow:auto}
     </style>
     <section>
-      <strong>本地聊天文字采集 · M1.1 实验版</strong>
+      <strong>本地聊天文字采集 · M1.2 实验版</strong>
       <p id="state">正在监听。请只在当前会话中缓慢翻看更早的历史。</p>
       <p id="progress">等待列表内容……</p>
       <p id="warn">采集可能包含私人聊天文字，仅保存在本页内存。不要把导出的 JSON/TXT 发给别人或提交到 GitHub。</p>
@@ -232,14 +232,17 @@
     observer.disconnect();
     scroller.removeEventListener("scroll", captureVisible);
     clearInterval(timer);
-    const ordered = [...entries.values()].sort((a, b) => a.dataIndex - b.dataIndex);
+    // User verified in the current Douyin UI that larger virtual indexes are
+    // older messages. Export oldest -> newest (chat reading order).
+    const ordered = [...entries.values()].sort((a, b) => b.dataIndex - a.dataIndex);
     const indexes = ordered.map(entry => entry.dataIndex);
     const span = coverage(indexes);
     archive = {
-      schemaVersion: "0.1.6-raw-preview",
+      schemaVersion: "0.1.7-raw-preview",
       platform: "douyin",
       source: "user-visible-webpage-dom",
       scope: "one-open-chat-list",
+      exportOrder: "oldest-first-by-observed-virtual-index",
       capturedAt: new Date().toISOString(),
       capture: {
         status: "partial",
@@ -314,7 +317,7 @@
   byId("txt").addEventListener("click", () => {
     if (!archive) return;
     const lines = [
-      "抖音聊天列表原始采集 · 实验预览（未验证完整）",
+      "抖音聊天列表原始采集 · 实验预览（较早在上，较近在下；未验证完整）",
       `观察条目：${archive.capture.observedCount}；范围：${archive.capture.minIndex}–${archive.capture.maxIndex}`,
       `未观察索引：${archive.capture.unobservedIndexesInRange}；语音转写未验证`, ""
     ];
